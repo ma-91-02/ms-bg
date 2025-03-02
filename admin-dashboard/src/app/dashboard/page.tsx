@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { Session } from "next-auth";
 
 export default function Dashboard() {
   const { data: session } = useSession();
