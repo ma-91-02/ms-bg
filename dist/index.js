@@ -7,7 +7,7 @@ const express_1 = __importDefault(require("express"));
 const app = (0, express_1.default)();
 const port = 3000;
 app.get('/', (req, res) => {
-    res.send('Hello from TypeScript test  + Express!');
+    res.send('مرحبا بك استاذ مصطفى ان شاء الله قريبا سوف نشم عطر يوسف');
 });
 app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
