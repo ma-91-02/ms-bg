@@ -1,0 +1,32 @@
+{
+  "name": "ms-ts",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node-dev src/index.ts",
+    "build": "tsc",
+    "dev": "ts-node-dev --respawn src/index.ts --transpileOnly"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.2",
+    "@types/mongoose": "^5.11.96",
+    "@types/node": "^22.13.5",
+    "ts-node-dev": "^1.1.8",
+    "typescript": "^5.7.3"
+  }
+}

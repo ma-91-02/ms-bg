@@ -1,0 +1,50 @@
+write all the files that should not be uploaded to the repository
+
+node_modules
+.env
+# Dependency directories
+node_modules/
+/dist
+/.pnp
+.pnp.js
+
+# Environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Build outputs
+/build
+/out
+/dist
+
+# Coverage directories
+/coverage
+
+# Temporary files
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
