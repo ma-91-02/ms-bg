@@ -1,11 +1,18 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import cors from 'cors';
 import { setupAdmin } from './config/setupAdmin';
 import { login } from './controllers/authController';
 import { getData } from './controllers/dataController';
 import { authenticateToken } from './middleware/authenticateToken';
-import cors from 'cors';
+import path from 'path';
+import { setupSwagger } from './config/swagger';
+
+// استيراد الراوترات الجديدة
+import mobileAuthRoutes from './routes/mobile/auth';
+import mobileReportRoutes from './routes/mobile/reports';
+import adminReportRoutes from './routes/admin/reports';
 
 // تحميل متغيرات البيئة
 dotenv.config();
@@ -17,11 +24,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-// راوت تسجيل الدخول
+// راوترات API الحالية
 app.post('/api/login', login);
-
-// راوت الحصول على البيانات (محمي)
 app.get('/api/data', authenticateToken, getData);
+
+// دمج راوترات API الجديدة
+app.use('/api/mobile/auth', mobileAuthRoutes);
+app.use('/api/mobile/reports', mobileReportRoutes);
+app.use('/api/admin/reports', adminReportRoutes);
+
+// الوصول إلى مجلد الصور المحملة
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // التحقق من المتغيرات البيئية
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -45,6 +58,9 @@ mongoose.connect(MONGODB_URI)
     app.listen(PORT, () => {
       console.log(`🚀 الخادم يعمل على المنفذ ${PORT}`);
     });
+
+    // إعداد توثيق API
+    setupSwagger(app);
   })
   .catch((err) => {
     console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err);

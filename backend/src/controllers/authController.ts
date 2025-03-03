@@ -1,43 +1,36 @@
-import { Request, Response } from 'express';
-import { RequestHandler } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import Admin, { IAdmin } from '../models/Admin';
+import Admin from '../models/Admin';
 
-interface JwtPayload {
-  id: string;
-}
-
+// توحيد طريقة إنشاء التوكن
 const signToken = (id: string): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET is not defined');
-  }
-
-  const payload: JwtPayload = { id };
-  const options: jwt.SignOptions = {
-    expiresIn: process.env.JWT_EXPIRES_IN || '90d'
-  };
-
+  const secret = process.env.JWT_SECRET || 'default-secret-key';
+  
   try {
-    return jwt.sign(payload, secret);
+    return jwt.sign(
+      { id },
+      secret,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '90d' }
+    );
   } catch (error) {
-    throw new Error('Error signing JWT token');
+    console.error('خطأ في إنشاء التوكن:', error);
+    throw new Error('خطأ في إنشاء التوكن JWT');
   }
 };
 
-export const login: RequestHandler = async (req, res, next) => {
+export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { username, password } = req.body;
     
-    // التحقق من وجود اسم المستخدم وكلمة المرور
+    // 1) التحقق من وجود اسم المستخدم وكلمة المرور
     if (!username || !password) {
       return res.status(400).json({
         success: false,
-        message: 'يرجى تقديم اسم المستخدم وكلمة المرور'
+        message: 'الرجاء إدخال اسم المستخدم وكلمة المرور'
       });
     }
     
-    // البحث عن المستخدم
+    // 2) التحقق من وجود الأدمن وصحة كلمة المرور
     const admin = await Admin.findOne({ username }).select('+password');
     
     if (!admin || !(await admin.comparePassword(password))) {
@@ -47,31 +40,23 @@ export const login: RequestHandler = async (req, res, next) => {
       });
     }
     
-    // إنشاء التوكن
-    const token = jwt.sign(
-      { id: admin._id },
-      process.env.JWT_SECRET || 'your-default-secret-key',
-      { expiresIn: '30d' }
-    );
+    // 3) إنشاء توكن JWT
+    const token = signToken(admin._id.toString());
     
-    // إرجاع التوكن ومعلومات المستخدم
-    const responseData = {
+    // 4) إرسال الرد
+    return res.status(200).json({
       success: true,
       token,
       user: {
         id: admin._id,
         username: admin.username
       }
-    };
-    
-    console.log('Login response:', responseData);
-    return res.status(200).json(responseData);
-    
+    });
   } catch (error) {
     console.error('خطأ في تسجيل الدخول:', error);
     return res.status(500).json({
       success: false,
-      message: 'خطأ في الخادم'
+      message: 'حدث خطأ في الخادم'
     });
   }
 };
