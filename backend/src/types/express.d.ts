@@ -1,3 +1,4 @@
+import { Document } from 'mongoose';
 import { IUser } from '../models/mobile/User';
 
 declare global {
@@ -6,7 +7,7 @@ declare global {
       user?: {
         id: string;
       };
-      userDocument?: IUser; // نستخدم الواجهة المعرفة مسبقاً
+      userDocument?: Document & IUser;
     }
   }
 }

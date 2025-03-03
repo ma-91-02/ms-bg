@@ -5,7 +5,9 @@ import bcrypt from 'bcryptjs';
 export interface IAdmin extends Document {
   username: string;
   password: string;
-  _id: mongoose.Types.ObjectId;
+  role: 'admin' | 'super';
+  createdAt: Date;
+  updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -13,28 +15,44 @@ export interface IAdmin extends Document {
 const adminSchema = new Schema<IAdmin>({
   username: {
     type: String,
-    required: [true, 'يجب إدخال اسم المستخدم'],
+    required: [true, 'اسم المستخدم مطلوب'],
     unique: true,
     trim: true
   },
   password: {
     type: String,
-    required: [true, 'يجب إدخال كلمة المرور'],
-    select: false // لن يتم إرجاع كلمة المرور في الاستعلامات
+    required: [true, 'كلمة المرور مطلوبة'],
+    minlength: [8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل'],
+    select: false
+  },
+  role: {
+    type: String,
+    enum: ['admin', 'super'],
+    default: 'admin'
   }
+}, {
+  timestamps: true
 });
 
 // تشفير كلمة المرور قبل الحفظ
 adminSchema.pre('save', async function(next) {
+  // فقط تشفير كلمة المرور إذا تم تعديلها
   if (!this.isModified('password')) return next();
   
-  this.password = await bcrypt.hash(this.password, 12);
-  next();
+  try {
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error: any) {
+    next(error);
+  }
 });
 
-// دالة مقارنة كلمة المرور
+// طريقة للتحقق من كلمة المرور
 adminSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-export default mongoose.model<IAdmin>('Admin', adminSchema);
+const Admin = mongoose.model<IAdmin>('Admin', adminSchema);
+
+export default Admin;

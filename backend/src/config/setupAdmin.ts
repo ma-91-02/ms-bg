@@ -1,27 +1,33 @@
 import Admin from '../models/Admin';
-import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 
-dotenv.config();
-
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminPassword123';
-
-export async function setupAdmin() {
+/**
+ * إنشاء حساب المسؤول الافتراضي إذا لم يكن موجودًا
+ */
+const setupAdmin = async (): Promise<void> => {
   try {
-    // التحقق من وجود أدمن
-    const adminExists = await Admin.findOne({ username: ADMIN_USERNAME });
+    // التحقق من وجود حساب المسؤول
+    const adminExists = await Admin.findOne({ username: process.env.ADMIN_USERNAME });
     
     if (!adminExists) {
-      // إنشاء أدمن جديد
+      // تشفير كلمة المرور
+      const hashedPassword = await bcrypt.hash(
+        process.env.ADMIN_PASSWORD || 'admin123', 
+        12
+      );
+      
+      // إنشاء حساب المسؤول
       await Admin.create({
-        username: ADMIN_USERNAME,
-        password: ADMIN_PASSWORD
+        username: process.env.ADMIN_USERNAME || 'admin',
+        password: hashedPassword,
+        role: 'super'
       });
-      console.log('✅ تم إنشاء حساب الأدمن بنجاح');
-    } else {
-      console.log('ℹ️ حساب الأدمن موجود مسبقاً');
+      
+      console.log('✅ تم إنشاء حساب المسؤول الافتراضي بنجاح');
     }
   } catch (error) {
-    console.error('❌ خطأ في إعداد حساب الأدمن:', error);
+    console.error('❌ فشل في إنشاء حساب المسؤول الافتراضي:', error);
   }
-}
+};
+
+export default setupAdmin;

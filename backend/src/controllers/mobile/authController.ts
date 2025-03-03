@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import User from '../../models/mobile/User';
 import { generateOTP, sendSMS } from '../../services/smsService';
 import whatsappService from '../../services/whatsappService';
+import { sendSuccess, sendError } from '../../utils/responseGenerator';
+import { AuthRequest } from '../../types/express';
 
 // إنشاء JWT token
 const signToken = (id: string): string => {
@@ -16,10 +18,7 @@ export const sendOTP = async (req: Request, res: Response) => {
     const { phoneNumber } = req.body;
     
     if (!phoneNumber) {
-      return res.status(400).json({
-        success: false,
-        message: 'رقم الهاتف مطلوب'
-      });
+      return sendError(res, 'رقم الهاتف مطلوب', 400);
     }
     
     // توليد رمز OTP مكون من 6 أرقام
@@ -47,10 +46,7 @@ export const sendOTP = async (req: Request, res: Response) => {
       });
     }
     
-    res.status(200).json({
-      success: true,
-      message: 'تم إرسال رمز التحقق عبر WhatsApp'
-    });
+    return sendSuccess(res, null, 'تم إرسال رمز التحقق عبر WhatsApp');
   } catch (error) {
     console.error('خطأ في إرسال OTP:', error);
     res.status(500).json({
@@ -65,30 +61,37 @@ export const verifyOTP = async (req: Request, res: Response) => {
   try {
     const { phoneNumber, otp } = req.body;
     
+    // التحقق من وجود رقم الهاتف والرمز
     if (!phoneNumber || !otp) {
       return res.status(400).json({
         success: false,
-        message: 'رقم الهاتف ورمز التحقق مطلوبان'
+        message: 'يرجى توفير رقم الهاتف ورمز التحقق'
       });
     }
     
-    // رمز التخطي للتطوير
+    // البحث عن المستخدم
+    let user = await User.findOne({ phoneNumber });
+    
+    // إذا كان وضع التطوير وتم استخدام رمز التخطي
     if (process.env.NODE_ENV === 'development' && otp === '000000') {
       console.log('✅ [DEV MODE] تم استخدام رمز التخطي 000000');
       
-      // البحث عن المستخدم أو إنشاء مستخدم جديد إذا لم يكن موجوداً
-      let user = await User.findOne({ phoneNumber });
-      
+      // إنشاء مستخدم جديد إذا لم يكن موجوداً
       if (!user) {
         user = await User.create({
           phoneNumber,
+          password: 'temporary_password', // سيتم تغييرها لاحقاً
+          fullName: '',
           isProfileComplete: false
         });
       }
       
-      // إنشاء token
-      const token = signToken(user._id.toString());
+      // إنشاء التوكن
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, {
+        expiresIn: process.env.JWT_EXPIRE || '30d'
+      });
       
+      // إرسال الاستجابة
       return res.status(200).json({
         success: true,
         message: 'تم تسجيل الدخول بنجاح (وضع التطوير)',
@@ -97,18 +100,18 @@ export const verifyOTP = async (req: Request, res: Response) => {
         user: {
           id: user._id,
           phoneNumber: user.phoneNumber,
-          name: user.name || ''
+          name: user.fullName
         }
       });
     }
     
     // البحث عن المستخدم
-    const user = await User.findOne({
+    const userExists = await User.findOne({
       phoneNumber,
       otpExpires: { $gt: Date.now() }
     });
     
-    if (!user) {
+    if (!userExists) {
       return res.status(401).json({
         success: false,
         message: 'رقم الهاتف غير مسجل أو انتهت صلاحية الرمز'
@@ -116,7 +119,7 @@ export const verifyOTP = async (req: Request, res: Response) => {
     }
     
     // التحقق من الرمز
-    if (user.otp !== otp) {
+    if (userExists.otp !== otp) {
       return res.status(401).json({
         success: false,
         message: 'رمز التحقق غير صحيح'
@@ -124,22 +127,24 @@ export const verifyOTP = async (req: Request, res: Response) => {
     }
     
     // إعادة تعيين OTP
-    user.otp = undefined;
-    user.otpExpires = undefined;
-    await user.save();
+    userExists.otp = undefined;
+    userExists.otpExpires = undefined;
+    await userExists.save();
     
-    // إنشاء token
-    const token = signToken(user._id.toString());
+    // إنشاء توكن
+    const token = jwt.sign({ id: userExists._id }, process.env.JWT_SECRET!, {
+      expiresIn: process.env.JWT_EXPIRE || '30d'
+    });
     
     res.status(200).json({
       success: true,
       message: 'تم تسجيل الدخول بنجاح',
       token,
-      isProfileComplete: user.isProfileComplete,
+      isProfileComplete: userExists.isProfileComplete,
       user: {
-        id: user._id,
-        phoneNumber: user.phoneNumber,
-        name: user.name || ''
+        id: userExists._id,
+        phoneNumber: userExists.phoneNumber,
+        name: userExists.fullName
       }
     });
   } catch (error) {
@@ -152,64 +157,232 @@ export const verifyOTP = async (req: Request, res: Response) => {
 };
 
 // إكمال ملف تعريف المستخدم
-export const completeProfile = async (req: Request, res: Response) => {
+export const completeProfile = async (req: AuthRequest, res: Response) => {
   try {
-    const { userType, name, idNumber } = req.body;
-    // تأكد من أن req.user موجود
+    // التحقق من وجود المستخدم
     if (!req.user) {
       return res.status(401).json({
         success: false,
-        message: 'غير مصرح به - يرجى تسجيل الدخول'
+        message: 'غير مصرح به. يرجى تسجيل الدخول'
       });
     }
-    
-    const userId = req.user.id;
-    
-    // التحقق من صحة نوع المستخدم
-    if (!['finder', 'loser'].includes(userType)) {
+
+    const userId = req.user._id;
+    const { password, confirmPassword, fullName, lastName, email, birthDate } = req.body;
+
+    // التحقق من تطابق كلمتي المرور
+    if (password !== confirmPassword) {
       return res.status(400).json({
         success: false,
-        message: 'نوع مستخدم غير صالح. يجب أن يكون إما finder أو loser'
+        message: 'كلمة المرور وتأكيد كلمة المرور غير متطابقين'
       });
     }
-    
-    // تحديث ملف تعريف المستخدم
-    const user = await User.findByIdAndUpdate(
-      userId,
-      {
-        userType,
-        name,
-        idNumber,
-        isProfileComplete: true
-      },
-      { new: true, runValidators: true }
-    );
+
+    // جلب المستخدم أولاً
+    const user = await User.findById(userId);
     
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'المستخدم غير موجود'
+        message: 'لم يتم العثور على المستخدم'
       });
     }
     
-    return res.status(200).json({
+    // تحديث بيانات المستخدم
+    if (password) user.password = password;
+    if (fullName) user.fullName = fullName;
+    if (lastName) user.lastName = lastName;
+    if (email) user.email = email;
+    if (birthDate) user.birthDate = new Date(birthDate);
+    user.isProfileComplete = true;
+    
+    // حفظ المستخدم - سيؤدي ذلك إلى تشغيل هوك pre-save وتشفير كلمة المرور
+    await user.save();
+
+    // إنشاء توكن جديد
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, {
+      expiresIn: process.env.JWT_EXPIRE || '30d'
+    });
+
+    res.status(200).json({
       success: true,
       message: 'تم تحديث الملف الشخصي بنجاح',
+      token,
+      user: {
+        id: user._id,
+        phoneNumber: user.phoneNumber,
+        fullName: user.fullName,
+        lastName: user.lastName || '',
+        email: user.email || '',
+        birthDate: user.birthDate
+      }
+    });
+  } catch (error) {
+    console.error('خطأ في تحديث الملف الشخصي:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث الملف الشخصي'
+    });
+  }
+};
+
+/**
+ * استكمال التسجيل بعد التحقق من OTP
+ */
+export const completeRegistration = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, password, confirmPassword, fullName, lastName, email, birthDate } = req.body;
+    
+    // التحقق من وجود الحقول الإلزامية
+    if (!phoneNumber || !password || !confirmPassword || !fullName) {
+      return res.status(400).json({
+        success: false,
+        message: 'يرجى توفير جميع الحقول المطلوبة: رقم الهاتف، كلمة المرور، تأكيد كلمة المرور، الاسم الكامل'
+      });
+    }
+    
+    // التحقق من تطابق كلمة المرور
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'كلمة المرور وتأكيد كلمة المرور غير متطابقين'
+      });
+    }
+    
+    // البحث عن المستخدم بعد التحقق من OTP
+    const user = await User.findOne({ phoneNumber });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'لم يتم العثور على المستخدم. يرجى التحقق من الرقم أو إكمال عملية التحقق من OTP أولاً'
+      });
+    }
+    
+    // تحديث بيانات المستخدم
+    user.password = password;
+    user.fullName = fullName;
+    user.lastName = lastName || '';
+    user.email = email || '';
+    user.birthDate = birthDate ? new Date(birthDate) : undefined;
+    user.isProfileComplete = true;
+    
+    await user.save();
+    
+    // إنشاء توكن
+    const token = signToken(user._id.toString());
+    
+    res.status(200).json({
+      success: true,
+      message: 'تم إكمال التسجيل بنجاح',
       data: {
         user: {
           id: user._id,
           phoneNumber: user.phoneNumber,
-          name: user.name,
-          userType: user.userType,
-          isProfileComplete: user.isProfileComplete
-        }
+          fullName: user.fullName,
+          lastName: user.lastName,
+          email: user.email,
+          birthDate: user.birthDate,
+          points: user.points
+        },
+        token
       }
     });
   } catch (error) {
-    console.error('خطأ في تكملة الملف الشخصي:', error);
-    return res.status(500).json({
+    console.error('خطأ في استكمال التسجيل:', error);
+    res.status(500).json({
       success: false,
-      message: 'حدث خطأ أثناء تحديث الملف الشخصي'
+      message: 'حدث خطأ أثناء استكمال التسجيل'
+    });
+  }
+};
+
+/**
+ * تسجيل الدخول باستخدام رقم الهاتف وكلمة المرور
+ */
+export const login = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, password } = req.body;
+
+    // التحقق من وجود رقم الهاتف وكلمة المرور
+    if (!phoneNumber || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'يرجى توفير رقم الهاتف وكلمة المرور'
+      });
+    }
+
+    // البحث عن المستخدم
+    const user = await User.findOne({ phoneNumber });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'المستخدم غير موجود. يرجى التسجيل أولاً'
+      });
+    }
+
+    // تحقق إذا كانت كلمة المرور مخزنة بشكل نصي (إجراء مؤقت)
+    let isValidPassword = false;
+    
+    // أولاً، حاول التحقق باستخدام طريقة comparePassword
+    try {
+      isValidPassword = await user.comparePassword(password);
+    } catch (error) {
+      console.log('خطأ في مقارنة كلمة المرور:', error);
+    }
+    
+    // إذا فشلت المقارنة، تحقق من تطابق النص مباشرة (للمستخدمين الموجودين بكلمات مرور نصية)
+    if (!isValidPassword && user.password === password) {
+      console.log('تم استخدام مقارنة كلمة المرور النصية - سيتم تحديثها');
+      
+      // تحديث كلمة المرور لتشفيرها
+      user.password = password;
+      await user.save();
+      
+      // تعيين isValidPassword إلى true بعد تحديث كلمة المرور
+      isValidPassword = true;
+    }
+
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'كلمة المرور غير صحيحة'
+      });
+    }
+
+    // التحقق من حالة حظر المستخدم
+    if (user.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: 'تم حظر حسابك. يرجى التواصل مع الدعم'
+      });
+    }
+
+    // إنشاء توكن
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, {
+      expiresIn: process.env.JWT_EXPIRE || '30d'
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'تم تسجيل الدخول بنجاح',
+      token,
+      user: {
+        id: user._id,
+        phoneNumber: user.phoneNumber,
+        fullName: user.fullName,
+        lastName: user.lastName || '',
+        email: user.email || '',
+        birthDate: user.birthDate,
+        isProfileComplete: user.isProfileComplete
+      }
+    });
+  } catch (error) {
+    console.error('خطأ في تسجيل الدخول:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تسجيل الدخول'
     });
   }
 };

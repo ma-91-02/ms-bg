@@ -1,104 +1,107 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose from 'mongoose';
 
-export interface IReport extends Document {
-  type: 'lost' | 'found';
-  title: string;
-  description: string;
-  category: string;
-  location: {
-    type: string;
-    coordinates: [number, number]; // [longitude, latitude]
-    address: string;
-  };
-  date: Date;
-  images: string[]; // روابط الصور
-  documentType: string; // نوع المستند (هوية، جواز سفر، إلخ)
-  documentId?: string; // رقم المستند إن وجد
-  status: 'pending' | 'approved' | 'rejected';
-  user: mongoose.Types.ObjectId;
-  contactInfo: {
-    name: string;
-    phoneNumber: string;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const reportSchema = new Schema<IReport>({
+const reportSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   type: {
     type: String,
-    required: [true, 'نوع الإبلاغ مطلوب'],
-    enum: ['lost', 'found']
-  },
-  title: {
-    type: String,
-    required: [true, 'عنوان الإبلاغ مطلوب'],
-    trim: true
-  },
-  description: {
-    type: String,
-    required: [true, 'وصف الإبلاغ مطلوب'],
-    trim: true
+    enum: ['lost', 'found'],
+    required: true
   },
   category: {
     type: String,
-    required: [true, 'فئة المستند مطلوبة']
+    enum: ['id', 'passport', 'driving_license', 'credit_card', 'phone', 'electronics', 'jewelry', 'bag', 'clothing', 'money', 'keys', 'pet', 'other'],
+    required: true
+  },
+  documentType: {
+    type: String,
+    enum: ['national_id', 'passport', 'driving_license', 'residence_card', 'credit_card', 'health_insurance', 'student_id', 'employee_id', 'other'],
+    required: function() {
+      return this.category === 'id' || this.category === 'passport' || this.category === 'driving_license' || this.category === 'credit_card';
+    }
+  },
+  title: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: [100, 'العنوان لا يمكن أن يتجاوز 100 حرف']
+  },
+  description: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: [500, 'الوصف لا يمكن أن يتجاوز 500 حرف']
+  },
+  date: {
+    type: Date,
+    required: true
   },
   location: {
     type: {
       type: String,
-      default: 'Point',
-      enum: ['Point']
+      enum: ['Point'],
+      default: 'Point'
     },
     coordinates: {
-      type: [Number],
-      required: [true, 'الإحداثيات مطلوبة [الطول، العرض]']
+      type: [Number], // [longitude, latitude]
+      required: true
     },
     address: {
       type: String,
-      required: [true, 'العنوان مطلوب']
+      required: true
     }
   },
-  date: {
-    type: Date,
-    required: [true, 'تاريخ الفقدان/العثور مطلوب']
-  },
-  images: [String],
-  documentType: {
+  governorate: {
     type: String,
-    required: [true, 'نوع المستند مطلوب']
+    required: true
   },
-  documentId: {
-    type: String
+  district: {
+    type: String,
+    required: true
+  },
+  images: {
+    type: [String],
+    default: []
   },
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected'],
+    enum: ['pending', 'approved', 'rejected', 'closed', 'claimed'],
     default: 'pending'
   },
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'المستخدم مطلوب']
+  rejectionReason: {
+    type: String,
+    default: null
   },
-  contactInfo: {
-    name: {
-      type: String,
-      required: [true, 'اسم جهة الاتصال مطلوب']
-    },
-    phoneNumber: {
-      type: String,
-      required: [true, 'رقم هاتف جهة الاتصال مطلوب']
-    }
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
-},
-{
+}, {
   timestamps: true
 });
 
-// إضافة فهرس جغرافي للموقع
+// إضافة فهرس جغرافي لدعم استعلامات الموقع
 reportSchema.index({ location: '2dsphere' });
 
-const Report = mongoose.model<IReport>('Report', reportSchema);
+// إضافة فهرس للبحث النصي
+reportSchema.index({ 
+  title: 'text', 
+  description: 'text' 
+}, {
+  weights: {
+    title: 2,
+    description: 1
+  },
+  name: 'text_search_index'
+});
 
-export default Report;
+const Report = mongoose.model('Report', reportSchema);
+
+export default Report; 
