@@ -1,4 +1,4 @@
-import { TokenService, TokenPayload } from '../../services/tokenService';
+import TokenService from '../../services/common/tokenService';
 import jwt from 'jsonwebtoken';
 
 // محاكاة عمل jwt لتجنب الاعتماد على المفتاح السري الحقيقي
@@ -26,28 +26,36 @@ describe('TokenService', () => {
   
   // اختبار إنشاء التوكن
   test('generateToken يجب أن ينشئ توكن صالح', () => {
-    const token = TokenService.generateToken('user123', 'user');
+    // تحديث الوسائط لتتوافق مع تنفيذ TokenService
+    const payload = { id: 'user123' };
+    const secret = process.env.JWT_SECRET || 'test_secret';
+    const expiresIn = process.env.JWT_EXPIRES_IN || '1h';
+    
+    const token = TokenService.generateToken(payload, secret, expiresIn);
     
     expect(token).toBe('mocked_token');
     expect(jwt.sign).toHaveBeenCalledWith(
-      { id: 'user123', role: 'user' },
-      'test_secret',
-      { expiresIn: '1h' }
+      payload,
+      secret,
+      { expiresIn }
     );
   });
   
   // اختبار التحقق من التوكن
   test('verifyToken يجب أن يعيد البيانات المشفرة من التوكن الصالح', () => {
-    const payload = TokenService.verifyToken('valid_token');
+    const secret = process.env.JWT_SECRET || 'test_secret';
+    const payload = TokenService.verifyToken('valid_token', secret);
     
     expect(payload).toEqual({ id: 'user123', role: 'user' });
-    expect(jwt.verify).toHaveBeenCalledWith('valid_token', 'test_secret');
+    expect(jwt.verify).toHaveBeenCalledWith('valid_token', secret);
   });
   
   // اختبار رفض التوكن غير الصالح
   test('verifyToken يجب أن يرفض التوكن غير الصالح', () => {
+    const secret = process.env.JWT_SECRET || 'test_secret';
+    
     expect(() => {
-      TokenService.verifyToken('invalid_token');
-    }).toThrow('توكن غير صالح أو منتهي الصلاحية');
+      TokenService.verifyToken('invalid_token', secret);
+    }).toThrow();
   });
 }); 

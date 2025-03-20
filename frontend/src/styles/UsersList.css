@@ -1,0 +1,75 @@
+/* أنماط قائمة المستخدمين */
+.users-container {
+  padding: 20px;
+}
+
+.users-container h1 {
+  margin-bottom: 30px;
+  color: var(--primary-color);
+}
+
+.users-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.user-item {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.user-item:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.user-info h3 {
+  margin: 0 0 10px 0;
+  color: var(--text-color);
+}
+
+.user-info p {
+  margin: 0;
+  color: #777;
+}
+
+.user-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* أنماط خاصة بالأزرار في قائمة المستخدمين */
+.edit-button, .delete-button {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+}
+
+.delete-button {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+/* تخطيط للشاشات الصغيرة */
+@media (max-width: 768px) {
+  .users-list {
+    grid-template-columns: 1fr;
+  }
+  
+  .user-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .user-actions {
+    margin-top: 15px;
+    align-self: stretch;
+    justify-content: flex-start;
+  }
+} 

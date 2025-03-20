@@ -7,7 +7,10 @@
     "build": "tsc",
     "dev": "ts-node-dev --project tsconfig.json --respawn --transpile-only src/index.ts",
     "clean": "rimraf dist",
-    "rebuild": "npm run clean && npm run build"
+    "rebuild": "npm run clean && npm run build",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [],
   "author": "",
@@ -35,7 +38,6 @@
     "sharp": "^0.33.5",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
-    "twilio": "^5.4.5",
     "uuid": "^11.1.0",
     "xss-clean": "^0.1.4"
   },

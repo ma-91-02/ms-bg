@@ -1,0 +1,70 @@
+/* أنماط الشريط الجانبي */
+.sidebar-container {
+  width: 250px;
+  background-color: white;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  margin-left: 10px;
+}
+
+.logo-text h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--primary-color);
+}
+
+.logo-text p {
+  margin: 0;
+  font-size: 12px;
+  color: #777;
+}
+
+.sidebar-menu {
+  flex: 1;
+  padding: 20px 0;
+}
+
+.sidebar-item {
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-item:hover {
+  background-color: #f0f0ff;
+}
+
+.sidebar-item.active {
+  background-color: #f0f0ff;
+  border-right: 4px solid var(--primary-color);
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.sidebar-footer {
+  padding: 20px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.sidebar-item.logout {
+  color: var(--danger-color);
+} 

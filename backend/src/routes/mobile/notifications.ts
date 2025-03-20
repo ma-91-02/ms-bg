@@ -1,22 +1,23 @@
-import { Router } from 'express';
-import { protectMobile } from '../../middleware/mobileAuthMiddleware';
-import * as notificationController from '../../controllers/mobile/notificationController';
+import express from 'express';
+import { 
+  getUserNotifications, 
+  markAsRead, 
+  markAllAsRead
+} from '../../controllers/mobile/notificationController';
+import { protectMobile } from '../../middleware/mobile/authMiddleware';
 
-const router = Router();
+const router = express.Router();
 
-// جميع مسارات الإشعارات محمية وتتطلب تسجيل دخول
+// جميع المسارات تتطلب المصادقة
 router.use(protectMobile);
 
 // الحصول على إشعارات المستخدم
-router.get('/', notificationController.getUserNotifications);
+router.get('/', getUserNotifications);
 
 // وضع علامة "مقروء" على جميع الإشعارات
-router.patch('/read-all', notificationController.markAllAsRead);
+router.patch('/mark-all-read', markAllAsRead);
 
 // وضع علامة "مقروء" على إشعار معين
-router.patch('/:notificationId/read', notificationController.markAsRead);
-
-// حذف إشعار
-router.delete('/:notificationId', notificationController.deleteNotification);
+router.patch('/:notificationId/read', markAsRead);
 
 export default router; 

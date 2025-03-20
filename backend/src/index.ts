@@ -1,109 +1,92 @@
+import express from 'express';
+import mongoose from 'mongoose';
+import path from 'path';
+import cors from 'cors';
+import bcrypt from 'bcryptjs';
+import router from './routes';
+import errorHandler from './middleware/common/errorHandler';
+import { setupSecurityMiddleware } from './middleware/common/securityMiddleware';
 import dotenv from 'dotenv';
+import Admin from './models/admin/Admin';
+import app from './app';
+
+// تحميل متغيرات البيئة في بداية الملف
 dotenv.config();
 
-import express, { Request, Response, NextFunction } from 'express';
-import mongoose from 'mongoose';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import path from 'path';
+const PORT = process.env.PORT || 5000;
 
-// تحميل الإعدادات والخدمات
-import connectDB from './config/database';
-import setupAdmin from './config/setupAdmin';
-import validateEnv from './config/validateEnv';
-import { logger } from './services/loggerService';
-import { applySecurityMiddleware } from './middleware/securityMiddleware';
-import errorHandler from './middleware/errorHandler';
-import { globalLimiter } from './middleware/rateLimiter';
-import { setupSwagger } from './config/swagger';
+// إعداد CORS
+app.use(cors());
 
-// استيراد الراوترات
-import mobileAuthRoutes from './routes/mobile/auth';
-import mobileReportRoutes from './routes/mobile/reports';
-import adminReportRoutes from './routes/admin/reports';
+// إعداد وسائط الأمان
+setupSecurityMiddleware(app);
 
-// التحقق من المتغيرات البيئية
-validateEnv();
+// تحليل JSON 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// إنشاء تطبيق Express
-const app = express();
-const PORT = process.env.PORT || 3001;
+// المجلد الثابت للملفات المرفوعة
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// تطبيق ميدلويرات الأمان
-applySecurityMiddleware(app);
+// تسجيل المسارات
+app.use(router);
 
-// ميدلويرات أساسية
-app.use(helmet()); // تحسينات أمنية
-app.use(cors()); // السماح بطلبات CORS
-app.use(express.json({ limit: '10kb' })); // تحليل JSON مع حد للحجم
-app.use(express.urlencoded({ extended: true, limit: '10kb' })); // تحليل URL encoded
-app.use(morgan('dev')); // سجل HTTP
-app.use('/uploads', express.static(path.join(__dirname, '../uploads'))); // الملفات الثابتة
-app.use(globalLimiter); // محدد معدل الطلبات العام
-
-// إعداد Swagger
-setupSwagger(app);
-
-// تسجيل الراوترات
-app.use('/api/mobile/auth', mobileAuthRoutes);
-app.use('/api/mobile/reports', mobileReportRoutes);
-app.use('/api/admin/reports', adminReportRoutes);
-
-// التعامل مع المسارات غير الموجودة
-app.all('*', (req: Request, res: Response) => {
-  res.status(404).json({
-    success: false,
-    message: `لم يتم العثور على المسار: ${req.originalUrl}`
-  });
-});
-
-// معالج الأخطاء المركزي - يجب أن يأتي بعد كل الراوترات
+// معالج الأخطاء العام
 app.use(errorHandler);
 
-// بدء الخادم
-const startServer = async (): Promise<void> => {
-  try {
-    // الاتصال بقاعدة البيانات
-    await connectDB();
-    logger.info('تم الاتصال بقاعدة البيانات بنجاح');
-    
-    // إعداد حساب المسؤول الافتراضي
-    await setupAdmin();
-    
-    // تشغيل الخادم
-    const server = app.listen(PORT, () => {
-      logger.info(`الخادم يعمل على المنفذ ${PORT} في وضع ${process.env.NODE_ENV}`);
-    });
-    
-    // التعامل مع إشارات الإيقاف لإغلاق الخادم بشكل آمن
-    process.on('SIGTERM', () => {
-      logger.info('تم استلام إشارة SIGTERM. إغلاق الخادم بأمان.');
-      server.close(() => {
-        logger.info('تم إغلاق الخادم.');
-        process.exit(0);
+// الاتصال بقاعدة البيانات والتشغيل فقط إذا لم نكن في وضع الاختبار
+if (process.env.NODE_ENV !== 'test') {
+  const connectDB = async () => {
+    try {
+      const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ms-web';
+      
+      console.log(`Attempting to connect to MongoDB at: ${mongoURI}`);
+      await mongoose.connect(mongoURI);
+      console.log('✅ Connected to MongoDB successfully');
+      
+      // التحقق من وجود مشرف افتراضي وإنشائه إذا لم يكن موجودًا
+      try {
+        const adminExists = await Admin.findOne({ username: process.env.ADMIN_USERNAME || 'admin' });
+        
+        if (!adminExists) {
+          console.log('⚠️ No default admin found. Creating admin...');
+          
+          // تشفير كلمة المرور
+          const salt = await bcrypt.genSalt(10);
+          const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin', salt);
+          
+          // إنشاء مشرف افتراضي
+          const defaultAdmin = new Admin({
+            username: process.env.ADMIN_USERNAME || 'admin',
+            password: hashedPassword,
+            email: 'admin@example.com',
+            fullName: 'Admin User',
+            role: 'admin',
+            isActive: true
+          });
+          
+          await defaultAdmin.save();
+          console.log('✅ Default admin created successfully!');
+        } else {
+          console.log('✅ Default admin already exists');
+        }
+      } catch (error) {
+        console.error('❌ Error checking default admin:', error);
+      }
+      
+      // بدء الخادم
+      app.listen(PORT, () => {
+        console.log(`✅ Server running on port ${PORT}`);
       });
-    });
-    
-  } catch (error) {
-    logger.error('فشل بدء الخادم:', error);
-    process.exit(1);
-  }
-};
+    } catch (error) {
+      console.error('❌ MongoDB connection error:', error);
+      // تأكد من تشغيل خادم MongoDB
+      console.log('Please make sure MongoDB server is running on port 27017');
+    }
+  };
 
-// التعامل مع الاستثناءات غير المعالجة
-process.on('uncaughtException', (err: Error) => {
-  logger.error('استثناء غير معالج:', err);
-  process.exit(1);
-});
+  connectDB();
+}
 
-process.on('unhandledRejection', (reason: Error) => {
-  logger.error('رفض غير معالج:', reason);
-  process.exit(1);
-});
-
-// بدء التطبيق
-startServer();
-
-// تصدير التطبيق للاختبارات
-export { app };
+// تصدير app لاستخدامه في الاختبارات
+export default app;

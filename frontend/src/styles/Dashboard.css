@@ -1,0 +1,118 @@
+/* أنماط لوحة التحكم الرئيسية */
+
+:root {
+  --primary-color: #6153f4;
+  --secondary-color: #f8f8f8;
+  --text-color: #333;
+  --light-gray: #f1f1f8;
+  --border-color: #ddd;
+  --success-color: #4caf50;
+  --danger-color: #f44336;
+  --warning-color: #ff9800;
+}
+
+.dashboard-container {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  direction: rtl;
+  font-family: 'Arial', sans-serif;
+  background-color: var(--light-gray);
+}
+
+.dashboard-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* أنماط عامة للأزرار */
+button {
+  cursor: pointer;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.approve-button, .more-button {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.approve-button:hover, .more-button:hover {
+  background-color: #5046d6;
+}
+
+.reject-button {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.reject-button:hover {
+  background-color: #d32f2f;
+}
+
+.edit-button {
+  background-color: var(--warning-color);
+  color: white;
+}
+
+.edit-button:hover {
+  background-color: #e68900;
+}
+
+.save-button {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.save-button:hover {
+  background-color: #43a047;
+}
+
+/* أنماط عامة للبطاقات */
+.card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* أنماط عامة للنماذج */
+.form-row {
+  display: flex;
+  margin-bottom: 15px;
+}
+
+.form-group {
+  flex: 1;
+  margin-right: 15px;
+}
+
+.form-group:last-child {
+  margin-right: 0;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+} 

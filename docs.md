@@ -56,38 +56,45 @@ API للوحة التحكم
 1. لوحة المعلومات
 | المسار | الطريقة | الوصف | المعلمات المطلوبة | الاستجابة |
 |--------|--------|-------|-----------------|-----------|
-| /api/admin/dashboard/stats | GET | إحصائيات عامة | - | { success, userStats, documentStats, matchStats } |
+| /api/admin/dashboard/stats | GET | إحصائيات عامة | - | { success, data: { usersCount, ads, matches, contactRequests } } |
 | /api/admin/dashboard/recent-activity | GET | النشاطات الحديثة | limit? | { success, activities } |
 2. إدارة المستخدمين
 | المسار | الطريقة | الوصف | المعلمات المطلوبة | الاستجابة |
 |--------|--------|-------|-----------------|-----------|
 | /api/admin/users | GET | قائمة المستخدمين | search?, page?, limit? | { success, users, total, page, limit } |
-| /api/admin/users/:userId | GET | تفاصيل مستخدم | - | { success, user, documentStats } |
-| /api/admin/users/:userId | PATCH | تحديث بيانات مستخدم | fullName?, email?, isBlocked?, points? | { success, message, user } |
-| /api/admin/users/:userId | DELETE | حذف مستخدم | - | { success, message } |
-3. إدارة المستمسكات
+| /api/admin/users/:id | GET | تفاصيل مستخدم | - | { success, user } |
+| /api/admin/users/:id/block | PUT | تحديث حالة حظر مستخدم | isBlocked | { success, user } |
+| /api/admin/users/:id | DELETE | حذف مستخدم | - | { success, message } |
+3. إدارة الإعلانات
 | المسار | الطريقة | الوصف | المعلمات المطلوبة | الاستجابة |
 |--------|--------|-------|-----------------|-----------|
-| /api/admin/documents/pending | GET | المستمسكات المنتظرة للموافقة | page?, limit? | { success, documents, total, page, limit } |
-| /api/admin/documents/:documentId/approve | PATCH | موافقة على نشر مستمسك | - | { success, message, document } |
-| /api/admin/documents/:documentId/reject | PATCH | رفض نشر مستمسك | reason | { success, message } |
-| /api/admin/documents/matches | GET | المستمسكات المطابقة | page?, limit? | { success, matches, total, page, limit } |
-| /api/admin/documents/manual-match | POST | إنشاء مطابقة يدوية | lostDocumentId, foundDocumentId | { success, message, match } |
-4. إدارة طلبات التواصل
+| /api/admin/advertisements | GET | كل الإعلانات | page?, limit? | { success, data } |
+| /api/admin/advertisements/pending | GET | الإعلانات المنتظرة للموافقة | page?, limit? | { success, data } |
+| /api/admin/advertisements/:id | GET | تفاصيل إعلان | - | { success, data } |
+| /api/admin/advertisements/:id | PUT | تحديث إعلان | FormData | { success, data } |
+| /api/admin/advertisements/:id | DELETE | حذف إعلان | - | { success, message } |
+| /api/admin/advertisements/:id/approve | PUT | موافقة على إعلان | - | { success, data } |
+| /api/admin/advertisements/:id/reject | PUT | رفض إعلان | - | { success, data } |
+| /api/admin/advertisements/:id/resolve | PUT | تعيين إعلان كمنتهي | - | { success, data } |
+| /api/admin/advertisements/status/:status | GET | الإعلانات حسب الحالة | status, page?, limit? | { success, data } |
+4. إدارة المطابقات
 | المسار | الطريقة | الوصف | المعلمات المطلوبة | الاستجابة |
 |--------|--------|-------|-----------------|-----------|
-| /api/admin/contact-requests | GET | طلبات التواصل | status?, page?, limit? | { success, requests, total, page, limit } |
-| /api/admin/contact-requests/:requestId/approve | PATCH | موافقة على طلب تواصل | adminNote? | { success, message } |
-| /api/admin/contact-requests/:requestId/reject | PATCH | رفض طلب تواصل | reason | { success, message } |
-5. نظام المكافآت
+| /api/admin/matches | GET | كل المطابقات | page?, limit? | { success, data } |
+| /api/admin/matches/pending | GET | المطابقات المعلقة | page?, limit? | { success, data } |
+| /api/admin/matches/:id/approve | PUT | موافقة على مطابقة | - | { success, data } |
+| /api/admin/matches/:id/reject | PUT | رفض مطابقة | - | { success, data } |
+| /api/admin/matches/run-matching | GET | تشغيل المطابقة لكل الإعلانات | - | { success, data } |
+| /api/admin/matches/run-matching/:advertisementId | GET | تشغيل المطابقة لإعلان معين | - | { success, data } |
+| /api/admin/matches/cleanup-duplicates | POST | تنظيف المطابقات المكررة | - | { success, removed } |
+| /api/admin/matches/history | GET | سجل المطابقات | page?, limit? | { success, data } |
+5. إدارة طلبات التواصل
 | المسار | الطريقة | الوصف | المعلمات المطلوبة | الاستجابة |
 |--------|--------|-------|-----------------|-----------|
-| /api/admin/rewards | GET | قائمة المكافآت المتاحة | isActive? | { success, rewards } |
-| /api/admin/rewards | POST | إضافة مكافأة جديدة | title, description, pointsRequired, isActive | { success, message, reward } |
-| /api/admin/rewards/:rewardId | PATCH | تحديث مكافأة | title?, description?, pointsRequired?, isActive? | { success, message, reward } |
-| /api/admin/rewards/:rewardId | DELETE | حذف مكافأة | - | { success, message } |
-| /api/admin/reward-redemptions | GET | طلبات استبدال المكافآت | status?, page?, limit? | { success, redemptions, total, page, limit } |
-| /api/admin/reward-redemptions/:redemptionId/complete | PATCH | إكمال طلب استبدال | adminNote? | { success, message } |
+| /api/admin/contact-requests | GET | كل طلبات التواصل | status?, page?, limit? | { success, data, count, total, totalPages, currentPage } |
+| /api/admin/contact-requests/pending | GET | طلبات التواصل المعلقة | page?, limit? | { success, data, count, total, totalPages, currentPage } |
+| /api/admin/contact-requests/:id/approve | PUT | موافقة على طلب تواصل | - | { success, data } |
+| /api/admin/contact-requests/:id/reject | PUT | رفض طلب تواصل | - | { success, data } |
 ---
 هيكل قواعد البيانات
 جدول المستخدمين (Users)

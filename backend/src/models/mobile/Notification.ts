@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { NotificationType } from '../../types/notifications';
+import { NotificationType } from '../../types/mobile/notifications';
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
@@ -35,8 +35,7 @@ const NotificationSchema: Schema = new Schema({
     required: true
   },
   referenceId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Document'
+    type: Schema.Types.ObjectId
   },
   data: {
     type: Object

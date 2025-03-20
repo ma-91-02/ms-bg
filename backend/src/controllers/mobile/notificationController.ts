@@ -1,6 +1,7 @@
 import { Response } from 'express';
-import { AuthRequest } from '../../middleware/authMiddleware';
-import * as notificationService from '../../services/notificationService';
+import { AuthRequest } from '../../types/common/request';
+import * as notificationService from '../../services/mobile/notificationService';
+import { sendSuccess, sendError } from '../../utils/common/responseGenerator';
 
 /**
  * الحصول على إشعارات المستخدم
@@ -8,10 +9,7 @@ import * as notificationService from '../../services/notificationService';
 export const getUserNotifications = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user || !req.user._id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به'
-      });
+      return sendError(res, 'غير مصرح به', 401);
     }
 
     const page = parseInt(req.query.page as string) || 1;
@@ -22,18 +20,14 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
       { page, limit }
     );
 
-    res.status(200).json({
-      success: true,
-      data: result.notifications,
+    return sendSuccess(res, {
+      notifications: result.notifications,
       pagination: result.pagination,
       unreadCount: result.unreadCount
     });
   } catch (error) {
     console.error('خطأ في جلب الإشعارات:', error);
-    res.status(500).json({
-      success: false,
-      message: 'حدث خطأ أثناء جلب الإشعارات'
-    });
+    return sendError(res, 'حدث خطأ أثناء جلب الإشعارات', 500);
   }
 };
 
@@ -43,10 +37,7 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
 export const markAsRead = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user || !req.user._id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به'
-      });
+      return sendError(res, 'غير مصرح به', 401);
     }
 
     const { notificationId } = req.params;
@@ -56,17 +47,10 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
       req.user._id.toString()
     );
 
-    res.status(200).json({
-      success: true,
-      message: 'تم وضع علامة "مقروء" على الإشعار بنجاح',
-      data: notification
-    });
+    return sendSuccess(res, notification, 'تم وضع علامة "مقروء" على الإشعار بنجاح');
   } catch (error) {
     console.error('خطأ في وضع علامة "مقروء" على الإشعار:', error);
-    res.status(500).json({
-      success: false,
-      message: 'حدث خطأ أثناء تحديث حالة الإشعار'
-    });
+    return sendError(res, 'حدث خطأ أثناء تحديث حالة الإشعار', 500);
   }
 };
 
@@ -76,55 +60,14 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
 export const markAllAsRead = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user || !req.user._id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به'
-      });
+      return sendError(res, 'غير مصرح به', 401);
     }
 
     await notificationService.markAllNotificationsAsRead(req.user._id.toString());
 
-    res.status(200).json({
-      success: true,
-      message: 'تم وضع علامة "مقروء" على جميع الإشعارات بنجاح'
-    });
+    return sendSuccess(res, null, 'تم وضع علامة "مقروء" على جميع الإشعارات بنجاح');
   } catch (error) {
     console.error('خطأ في وضع علامة "مقروء" على جميع الإشعارات:', error);
-    res.status(500).json({
-      success: false,
-      message: 'حدث خطأ أثناء تحديث حالة الإشعارات'
-    });
-  }
-};
-
-/**
- * حذف إشعار
- */
-export const deleteNotification = async (req: AuthRequest, res: Response) => {
-  try {
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به'
-      });
-    }
-
-    const { notificationId } = req.params;
-
-    await notificationService.deleteNotification(
-      notificationId,
-      req.user._id.toString()
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'تم حذف الإشعار بنجاح'
-    });
-  } catch (error) {
-    console.error('خطأ في حذف الإشعار:', error);
-    res.status(500).json({
-      success: false,
-      message: 'حدث خطأ أثناء حذف الإشعار'
-    });
+    return sendError(res, 'حدث خطأ أثناء تحديث حالة الإشعارات', 500);
   }
 }; 

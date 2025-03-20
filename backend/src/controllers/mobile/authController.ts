@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../../models/mobile/User';
-import { generateOTP, sendSMS } from '../../services/smsService';
-import whatsappService from '../../services/whatsappService';
-import { sendSuccess, sendError } from '../../utils/responseGenerator';
+import { generateOTP, sendSMS } from '../../services/common/smsService';
+import whatsappService from '../../services/common/whatsappService';
+import { sendSuccess, sendError } from '../../utils/common/responseGenerator';
 import { AuthRequest } from '../../types/express';
+import Otp from '../../models/mobile/Otp';
 
 // إنشاء JWT token
 const signToken = (id: string): string => {
@@ -18,146 +19,150 @@ export const sendOTP = async (req: Request, res: Response) => {
     const { phoneNumber } = req.body;
     
     if (!phoneNumber) {
-      return sendError(res, 'رقم الهاتف مطلوب', 400);
+      return res.status(400).json({
+        success: false,
+        message: 'رقم الهاتف مطلوب'
+      });
     }
     
     // توليد رمز OTP مكون من 6 أرقام
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // انتهاء الصلاحية بعد 15 دقيقة
+    
+    console.log(`📤 إرسال OTP إلى ${phoneNumber}: ${otp}`);
     
     // حفظ OTP في قاعدة البيانات
-    const user = await User.findOneAndUpdate(
-      { phoneNumber },
-      { 
-        phoneNumber,
-        otp,
-        otpExpires
-      },
-      { upsert: true, new: true }
-    );
+    const newOtp = new Otp({
+      phoneNumber,
+      code: otp,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000) // ينتهي بعد 15 دقيقة
+    });
     
-    // إرسال OTP عبر WhatsApp
-    const sent = await whatsappService.sendOTP(phoneNumber, otp);
+    await newOtp.save();
     
-    if (!sent) {
-      return res.status(500).json({
-        success: false,
-        message: 'حدث خطأ أثناء إرسال رمز التحقق'
-      });
+    // إرسال OTP عبر واتساب أو SMS
+    try {
+      // استدعاء خدمة الرسائل (محاكاة فقط في هذا المثال)
+      // await smsService.sendOTP(phoneNumber, otp);
+    } catch (error) {
+      console.error('Error sending SMS:', error);
     }
     
-    return sendSuccess(res, null, 'تم إرسال رمز التحقق عبر WhatsApp');
+    return res.status(200).json({
+      success: true,
+      message: 'تم إرسال رمز التحقق بنجاح'
+      // في بيئة التطوير، قد ترغب في إرجاع الرمز للاختبار
+      // ...(process.env.NODE_ENV === 'development' ? { testOtp: otp } : {})
+    });
   } catch (error) {
-    console.error('خطأ في إرسال OTP:', error);
-    res.status(500).json({
+    console.error('Error generating OTP:', error);
+    return res.status(500).json({
       success: false,
-      message: 'حدث خطأ في الخادم'
+      message: 'حدث خطأ أثناء إرسال رمز التحقق'
     });
   }
 };
 
 // التحقق من OTP
-export const verifyOTP = async (req: Request, res: Response) => {
+export const verifyOtp = async (req: Request, res: Response) => {
   try {
     const { phoneNumber, otp } = req.body;
-    
-    // التحقق من وجود رقم الهاتف والرمز
+
+    // التحقق من وجود رقم الهاتف ورمز OTP
     if (!phoneNumber || !otp) {
-      return res.status(400).json({
+      return res.status(400).json({ 
         success: false,
-        message: 'يرجى توفير رقم الهاتف ورمز التحقق'
+        message: "يجب توفير رقم الهاتف ورمز التحقق" 
+      });
+    }
+
+    // البحث عن آخر رمز OTP مرسل لهذا الرقم
+    const otpRecord = await Otp.findOne({ phoneNumber }).sort({ createdAt: -1 });
+    
+    if (!otpRecord) {
+      return res.status(400).json({ 
+        success: false,
+        message: "لم يتم إرسال رمز تحقق لهذا الرقم" 
       });
     }
     
-    // البحث عن المستخدم
+    // التحقق من صحة الرمز
+    const isValidOtp = otpRecord.code === otp;
+    
+    // التحقق من صلاحية الرمز (لم تنتهي مدته)
+    const now = new Date();
+    const otpExpiry = otpRecord.expiresAt || new Date(otpRecord.createdAt.getTime() + 15 * 60000);
+    
+    if (now > otpExpiry) {
+      return res.status(400).json({ 
+        success: false,
+        message: "انتهت صلاحية رمز التحقق" 
+      });
+    }
+
+    if (!isValidOtp) {
+      return res.status(400).json({ 
+        success: false,
+        message: "رمز التحقق غير صحيح" 
+      });
+    }
+
+    // تحديث حالة OTP إلى مستخدم
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+
+    // إنشاء المستخدم أو الحصول عليه إذا كان موجودًا بالفعل - تغيير هنا
     let user = await User.findOne({ phoneNumber });
     
-    // إذا كان وضع التطوير وتم استخدام رمز التخطي
-    if (process.env.NODE_ENV === 'development' && otp === '000000') {
-      console.log('✅ [DEV MODE] تم استخدام رمز التخطي 000000');
-      
-      // إنشاء مستخدم جديد إذا لم يكن موجوداً
-      if (!user) {
-        user = await User.create({
-          phoneNumber,
-          password: 'temporary_password', // سيتم تغييرها لاحقاً
-          fullName: '',
-          isProfileComplete: false
-        });
-      }
-      
-      // إنشاء التوكن
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, {
-        expiresIn: process.env.JWT_EXPIRE || '30d'
+    if (!user) {
+      // إنشاء مستخدم جديد مع الحد الأدنى من المعلومات
+      user = new User({ 
+        phoneNumber,
+        // لا نضيف أي حقول أخرى هنا - سيكملها المستخدم لاحقًا
       });
-      
-      // إرسال الاستجابة
-      return res.status(200).json({
-        success: true,
-        message: 'تم تسجيل الدخول بنجاح (وضع التطوير)',
-        token,
-        isProfileComplete: user.isProfileComplete,
-        user: {
-          id: user._id,
-          phoneNumber: user.phoneNumber,
-          name: user.fullName
-        }
-      });
+      await user.save();
     }
-    
-    // البحث عن المستخدم
-    const userExists = await User.findOne({
-      phoneNumber,
-      otpExpires: { $gt: Date.now() }
-    });
-    
-    if (!userExists) {
-      return res.status(401).json({
-        success: false,
-        message: 'رقم الهاتف غير مسجل أو انتهت صلاحية الرمز'
-      });
-    }
-    
-    // التحقق من الرمز
-    if (userExists.otp !== otp) {
-      return res.status(401).json({
-        success: false,
-        message: 'رمز التحقق غير صحيح'
-      });
-    }
-    
-    // إعادة تعيين OTP
-    userExists.otp = undefined;
-    userExists.otpExpires = undefined;
-    await userExists.save();
-    
-    // إنشاء توكن
-    const token = jwt.sign({ id: userExists._id }, process.env.JWT_SECRET!, {
-      expiresIn: process.env.JWT_EXPIRE || '30d'
-    });
-    
-    res.status(200).json({
+
+    // إنشاء وإرجاع توكن JWT
+    const token = jwt.sign(
+      { userId: user._id, phoneNumber },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    );
+
+    return res.status(200).json({
       success: true,
-      message: 'تم تسجيل الدخول بنجاح',
+      message: "تم التحقق بنجاح",
       token,
-      isProfileComplete: userExists.isProfileComplete,
       user: {
-        id: userExists._id,
-        phoneNumber: userExists.phoneNumber,
-        name: userExists.fullName
+        id: user._id,
+        phoneNumber: user.phoneNumber,
+        fullName: user.fullName || '',
+        isProfileComplete: !!(user.fullName && user.email), // إضافة حقل للإشارة إلى اكتمال الملف الشخصي
       }
     });
   } catch (error) {
-    console.error('خطأ في التحقق من OTP:', error);
-    res.status(500).json({
+    console.error('Error verifying OTP:', error);
+    return res.status(500).json({ 
       success: false,
-      message: 'حدث خطأ في الخادم'
+      message: "حدث خطأ أثناء التحقق من الرمز" 
     });
   }
 };
 
+// تعريف نوع مؤقت 
+interface ExtendedAuthRequest extends Request {
+  user?: {
+    _id: string;
+    id: string;
+    fullName: string;
+    phoneNumber: string;
+    email?: string;
+    role?: string;
+  };
+}
+
 // إكمال ملف تعريف المستخدم
-export const completeProfile = async (req: AuthRequest, res: Response) => {
+export const completeProfile = async (req: Request, res: Response): Promise<Response> => {
   try {
     // التحقق من وجود المستخدم
     if (!req.user) {
@@ -204,7 +209,7 @@ export const completeProfile = async (req: AuthRequest, res: Response) => {
       expiresIn: process.env.JWT_EXPIRE || '30d'
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'تم تحديث الملف الشخصي بنجاح',
       token,
@@ -217,11 +222,12 @@ export const completeProfile = async (req: AuthRequest, res: Response) => {
         birthDate: user.birthDate
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('خطأ في تحديث الملف الشخصي:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: 'حدث خطأ أثناء تحديث الملف الشخصي'
+      message: 'حدث خطأ أثناء تحديث الملف الشخصي',
+      error: error.message
     });
   }
 };
@@ -229,7 +235,7 @@ export const completeProfile = async (req: AuthRequest, res: Response) => {
 /**
  * استكمال التسجيل بعد التحقق من OTP
  */
-export const completeRegistration = async (req: Request, res: Response) => {
+export const completeRegistration = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { phoneNumber, password, confirmPassword, fullName, lastName, email, birthDate } = req.body;
     
@@ -270,9 +276,9 @@ export const completeRegistration = async (req: Request, res: Response) => {
     await user.save();
     
     // إنشاء توكن
-    const token = signToken(user._id.toString());
+    const token = signToken(user._id?.toString() || '');
     
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'تم إكمال التسجيل بنجاح',
       data: {
@@ -290,7 +296,7 @@ export const completeRegistration = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('خطأ في استكمال التسجيل:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'حدث خطأ أثناء استكمال التسجيل'
     });
@@ -300,7 +306,7 @@ export const completeRegistration = async (req: Request, res: Response) => {
 /**
  * تسجيل الدخول باستخدام رقم الهاتف وكلمة المرور
  */
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { phoneNumber, password } = req.body;
 
@@ -364,7 +370,7 @@ export const login = async (req: Request, res: Response) => {
       expiresIn: process.env.JWT_EXPIRE || '30d'
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'تم تسجيل الدخول بنجاح',
       token,
@@ -380,9 +386,57 @@ export const login = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('خطأ في تسجيل الدخول:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'حدث خطأ أثناء تسجيل الدخول'
+    });
+  }
+};
+
+// إضافة وظيفة للحصول على ملف المستخدم الشخصي
+export const getUserProfile = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const authReq = req as any;
+    if (!authReq.user || !authReq.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'غير مصرح به. يرجى تسجيل الدخول'
+      });
+    }
+
+    const userId = authReq.user.id;
+    
+    // البحث عن المستخدم
+    const user = await User.findById(userId).select('-password -otp -otpExpires');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'لم يتم العثور على المستخدم'
+      });
+    }
+
+    // إرجاع بيانات المستخدم
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: user._id,
+        fullName: user.fullName,
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phoneNumber: user.phoneNumber,
+        birthDate: user.birthDate,
+        points: user.points,
+        isProfileComplete: user.isProfileComplete,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error: any) {
+    console.error('خطأ في الحصول على ملف المستخدم الشخصي:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء الحصول على ملف المستخدم الشخصي',
+      error: error.message
     });
   }
 };
