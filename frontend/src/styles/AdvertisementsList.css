@@ -1,0 +1,536 @@
+/* أنماط قائمة الإعلانات */
+.advertisements-list {
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.section-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.search-filter-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-input {
+  min-width: 250px;
+  padding: 8px 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.filter-box select {
+  min-width: 150px;
+  padding: 8px 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+}
+
+.refresh-btn {
+  padding: 8px 15px;
+}
+
+/* بطاقات الإعلانات */
+.ad-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.ad-card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: transform 0.3s, box-shadow 0.3s;
+  cursor: pointer;
+}
+
+.ad-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+}
+
+.ad-card-header {
+  display: flex;
+  gap: 15px;
+  padding: 15px;
+}
+
+.ad-image-container {
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f0f0f0;
+  position: relative;
+}
+
+.ad-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.ad-thumbnail:hover {
+  transform: scale(1.05);
+}
+
+.no-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+}
+
+.ad-info {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.ad-info h3 {
+  margin: 0 0 5px 0;
+  font-size: 18px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ad-owner {
+  margin: 0 0 10px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.ad-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #777;
+}
+
+.status-container {
+  margin-top: 8px;
+}
+
+.badge {
+  font-weight: normal;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.bg-warning {
+  background-color: #fff3cd !important;
+  color: #856404 !important;
+}
+
+.bg-success {
+  background-color: #d4edda !important;
+  color: #155724 !important;
+}
+
+.bg-danger {
+  background-color: #f8d7da !important;
+  color: #721c24 !important;
+}
+
+.bg-info {
+  background-color: #d1ecf1 !important;
+  color: #0c5460 !important;
+}
+
+.ad-card-footer {
+  padding: 12px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #eee;
+  background-color: #f9f9f9;
+}
+
+.details-btn {
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.action-buttons button {
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* المساحة بين الأزرار */
+.mx-1 {
+  margin-left: 0.25rem;
+  margin-right: 0.25rem;
+}
+
+/* التصميم المتجاوب */
+@media (max-width: 768px) {
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .search-filter-container {
+    width: 100%;
+  }
+  
+  .search-input, .filter-box select {
+    width: 100%;
+  }
+  
+  .ad-cards-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .ad-card-footer {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .details-btn, .action-buttons {
+    width: 100%;
+  }
+  
+  .action-buttons {
+    justify-content: space-between;
+  }
+}
+
+/* User name clickable link styles */
+.user-name-link {
+  color: #1976d2;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-name-link:hover {
+  color: #0d47a1;
+  text-decoration: underline;
+}
+
+.user-name-link .publisher-icon::before {
+  content: '👤';
+  margin-left: 5px;
+  font-size: 0.85em;
+}
+
+.location-icon::before {
+  content: '📍';
+  margin-left: 3px;
+  font-size: 0.85em;
+}
+
+/* تحسين مظهر حقول الموقع والتاريخ */
+.ad-location, .ad-date {
+  display: inline-flex;
+  align-items: center;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.user-id-link {
+  color: #1976d2;
+  cursor: pointer;
+  font-family: monospace;
+  transition: color 0.2s ease;
+}
+
+.user-id-link:hover {
+  color: #0d47a1;
+  text-decoration: underline;
+}
+
+.status-badge-list {
+  font-weight: 500 !important;
+  letter-spacing: 0.3px;
+  padding: 6px 12px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  direction: rtl;
+  border: 1px solid transparent;
+}
+
+.bg-warning.status-badge-list {
+  background-color: #fff3cd !important;
+  color: #856404 !important;
+  border-color: #ffeeba;
+}
+
+.bg-success.status-badge-list {
+  background-color: #d4edda !important;
+  color: #155724 !important;
+  border-color: #c3e6cb;
+}
+
+.bg-danger.status-badge-list {
+  background-color: #f8d7da !important;
+  color: #721c24 !important;
+  border-color: #f5c6cb;
+}
+
+.bg-info.status-badge-list {
+  background-color: #d1ecf1 !important;
+  color: #0c5460 !important;
+  border-color: #bee5eb;
+}
+
+/* أنماط معلومات المستند */
+.ad-document-info {
+  margin: 5px 0;
+  color: #444;
+  font-size: 14px;
+  padding: 5px 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.document-title {
+  font-weight: 500;
+  margin-left: 5px;
+  color: #555;
+}
+
+.document-value {
+  font-weight: 600;
+  color: #333;
+}
+
+/* أنماط ناشر الإعلان */
+.ad-publisher {
+  margin: 5px 0 10px;
+}
+
+/* أنماط معلومات المستخدم المحسنة */
+.ad-user-info {
+  margin: 10px 0;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.user-name-link {
+  color: #1976d2;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 500;
+  width: 100%;
+  justify-content: space-between;
+}
+
+.user-name-link:hover {
+  color: #0d47a1;
+  text-decoration: underline;
+}
+
+.user-name-link .fas.fa-user {
+  margin-left: 8px;
+  color: #555;
+  font-size: 14px;
+}
+
+.user-actions {
+  display: flex;
+  gap: 10px;
+  margin-right: 8px;
+}
+
+.user-contact-icon, .user-call-icon, .user-whatsapp-icon {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #f0f4f8;
+}
+
+.user-contact-icon {
+  color: #1976d2;
+}
+
+.user-contact-icon:hover {
+  color: #ffffff;
+  background-color: #1976d2;
+}
+
+.user-call-icon {
+  color: #28a745;
+}
+
+.user-call-icon:hover {
+  color: #ffffff;
+  background-color: #28a745;
+}
+
+.user-whatsapp-icon {
+  color: #25D366;
+  font-size: 16px;
+}
+
+.user-whatsapp-icon:hover {
+  color: #ffffff;
+  background-color: #25D366;
+}
+
+/* أنماط البيانات الوصفية */
+.ad-meta {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0;
+  padding-top: 8px;
+  font-size: 13px;
+  color: #666;
+}
+
+.ad-location, .ad-date {
+  display: inline-flex;
+  align-items: center;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.fas.fa-map-marker-alt, .fas.fa-calendar-alt {
+  margin-left: 5px;
+  font-size: 14px;
+}
+
+.fas.fa-map-marker-alt {
+  color: #e74c3c;
+}
+
+.fas.fa-calendar-alt {
+  color: #3498db;
+}
+
+/* تحسين أزرار الإجراءات */
+.action-buttons button {
+  padding: 4px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.3s ease;
+  border-radius: 4px;
+}
+
+.action-buttons button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.action-buttons button:active {
+  transform: translateY(0);
+}
+
+.action-buttons button i {
+  font-size: 11px;
+}
+
+.details-btn {
+  font-weight: 600;
+  padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.details-btn i {
+  font-size: 14px;
+}
+
+/* تحسين حاوية الحالة */
+.status-container {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.status-badge-list {
+  font-weight: 500 !important;
+  letter-spacing: 0.3px;
+  padding: 6px 12px !important;
+  border-radius: 20px !important;
+  font-size: 12px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  direction: rtl;
+  border: 1px solid transparent;
+}
+
+/* أنماط لعرض الحالة فوق الصورة */
+.image-status-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+}
+
+.image-status-overlay .status-badge-list {
+  font-size: 10px !important;
+  padding: 3px 8px !important;
+  border-radius: 10px !important;
+  direction: rtl;
+  box-shadow: none;
+  margin: 0;
+} 

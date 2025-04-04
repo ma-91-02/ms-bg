@@ -1,68 +1,92 @@
-import express, { Request, Response } from 'express';
-import dotenv from 'dotenv';
+import express from 'express';
 import mongoose from 'mongoose';
-import cors from 'cors';
-import { setupAdmin } from './config/setupAdmin';
-import { login } from './controllers/authController';
-import { getData } from './controllers/dataController';
-import { authenticateToken } from './middleware/authenticateToken';
 import path from 'path';
-import { setupSwagger } from './config/swagger';
+import cors from 'cors';
+import bcrypt from 'bcryptjs';
+import router from './routes';
+import errorHandler from './middleware/common/errorHandler';
+import { setupSecurityMiddleware } from './middleware/common/securityMiddleware';
+import dotenv from 'dotenv';
+import Admin from './models/admin/Admin';
+import app from './app';
 
-// استيراد الراوترات الجديدة
-import mobileAuthRoutes from './routes/mobile/auth';
-import mobileReportRoutes from './routes/mobile/reports';
-import adminReportRoutes from './routes/admin/reports';
-
-// تحميل متغيرات البيئة
+// تحميل متغيرات البيئة في بداية الملف
 dotenv.config();
 
-const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// إعداد CORS
 app.use(cors());
 
-// راوترات API الحالية
-app.post('/api/login', login);
-app.get('/api/data', authenticateToken, getData);
+// إعداد وسائط الأمان
+setupSecurityMiddleware(app);
 
-// دمج راوترات API الجديدة
-app.use('/api/mobile/auth', mobileAuthRoutes);
-app.use('/api/mobile/reports', mobileReportRoutes);
-app.use('/api/admin/reports', adminReportRoutes);
+// تحليل JSON 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// الوصول إلى مجلد الصور المحملة
+// المجلد الثابت للملفات المرفوعة
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// التحقق من المتغيرات البيئية
-const MONGODB_URI = process.env.MONGODB_URI;
-const JWT_SECRET = process.env.JWT_SECRET;
+// تسجيل المسارات
+app.use(router);
 
-if (!MONGODB_URI || !JWT_SECRET) {
-  console.error('❌ خطأ: المتغيرات البيئية مفقودة!');
-  process.exit(1);
+// معالج الأخطاء العام
+app.use(errorHandler);
+
+// الاتصال بقاعدة البيانات والتشغيل فقط إذا لم نكن في وضع الاختبار
+if (process.env.NODE_ENV !== 'test') {
+  const connectDB = async () => {
+    try {
+      const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ms-web';
+      
+      console.log(`Attempting to connect to MongoDB at: ${mongoURI}`);
+      await mongoose.connect(mongoURI);
+      console.log('✅ Connected to MongoDB successfully');
+      
+      // التحقق من وجود مشرف افتراضي وإنشائه إذا لم يكن موجودًا
+      try {
+        const adminExists = await Admin.findOne({ username: process.env.ADMIN_USERNAME || 'admin' });
+        
+        if (!adminExists) {
+          console.log('⚠️ No default admin found. Creating admin...');
+          
+          // تشفير كلمة المرور
+          const salt = await bcrypt.genSalt(10);
+          const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin', salt);
+          
+          // إنشاء مشرف افتراضي
+          const defaultAdmin = new Admin({
+            username: process.env.ADMIN_USERNAME || 'admin',
+            password: hashedPassword,
+            email: 'admin@example.com',
+            fullName: 'Admin User',
+            role: 'admin',
+            isActive: true
+          });
+          
+          await defaultAdmin.save();
+          console.log('✅ Default admin created successfully!');
+        } else {
+          console.log('✅ Default admin already exists');
+        }
+      } catch (error) {
+        console.error('❌ Error checking default admin:', error);
+      }
+      
+      // بدء الخادم
+      app.listen(PORT, () => {
+        console.log(`✅ Server running on port ${PORT}`);
+      });
+    } catch (error) {
+      console.error('❌ MongoDB connection error:', error);
+      // تأكد من تشغيل خادم MongoDB
+      console.log('Please make sure MongoDB server is running on port 27017');
+    }
+  };
+
+  connectDB();
 }
 
-// الاتصال بقاعدة البيانات
-mongoose.connect(MONGODB_URI)
-  .then(async () => {
-    console.log('✅ تم الاتصال بقاعدة البيانات بنجاح');
-    
-    // إعداد حساب الأدمن
-    await setupAdmin();
-
-    // تشغيل السيرفر
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () => {
-      console.log(`🚀 الخادم يعمل على المنفذ ${PORT}`);
-    });
-
-    // إعداد توثيق API
-    setupSwagger(app);
-  })
-  .catch((err) => {
-    console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err);
-    process.exit(1);
-  });
+// تصدير app لاستخدامه في الاختبارات
+export default app;

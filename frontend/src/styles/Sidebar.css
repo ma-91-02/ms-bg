@@ -1,0 +1,346 @@
+/* أنماط الشريط الجانبي */
+.sidebar-container {
+  width: 250px;
+  background-color: #e1dcff;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  margin-left: 10px;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  transition: opacity 0.3s ease, width 0.3s ease, transform 0.3s ease;
+  width: auto;
+  overflow: hidden;
+}
+
+.logo-text h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--primary-color);
+  white-space: nowrap;
+}
+
+.logo-text p {
+  margin: 0;
+  font-size: 12px;
+  color: #777;
+  white-space: nowrap;
+}
+
+.sidebar-menu {
+  flex: 1;
+  padding: 20px 0;
+  overflow-y: auto;
+}
+
+.sidebar-item {
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  position: relative;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  margin-right: 6px;
+  margin-left: 6px;
+}
+
+.sidebar-item i {
+  margin-left: 12px;
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  opacity: 0.7;
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+
+.sidebar-item span {
+  white-space: nowrap;
+  transition: opacity 0.3s, transform 0.3s, width 0.3s;
+  overflow: hidden;
+}
+
+.sidebar-item:hover {
+  background-color: #f0f0ff;
+}
+
+.sidebar-item:hover i {
+  opacity: 1;
+}
+
+.sidebar-item.active {
+  background-color: #f0f0ff;
+  border-right: 4px solid var(--primary-color);
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.sidebar-item.active i {
+  opacity: 1;
+  color: var(--primary-color);
+}
+
+.sidebar-footer {
+  padding: 20px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.sidebar-item.logout {
+  color: var(--danger-color);
+}
+
+.sidebar-item.logout i {
+  color: var(--danger-color);
+}
+
+/* أنماط السايد بار في وضع الأيقونات فقط */
+.sidebar-container.icons-only {
+  width: 70px;
+}
+
+.sidebar-container.icons-only .sidebar-header {
+  padding: 15px 5px;
+  justify-content: center;
+}
+
+.sidebar-container.icons-only .logo-text {
+  opacity: 0;
+  width: 0;
+  transform: translateX(-20px);
+}
+
+.sidebar-container.icons-only .logo-container {
+  justify-content: center;
+}
+
+.sidebar-container.icons-only .logo-icon {
+  margin-left: 0;
+}
+
+.sidebar-container.icons-only .sidebar-item {
+  padding: 15px 0;
+  justify-content: center;
+}
+
+.sidebar-container.icons-only .sidebar-item span {
+  opacity: 0;
+  width: 0;
+  transform: translateX(-20px);
+}
+
+.sidebar-container.icons-only .sidebar-item:hover .tooltip {
+  display: block;
+}
+
+.sidebar-container.icons-only .sidebar-item i {
+  margin-left: 0;
+  font-size: 20px;
+  opacity: 1;
+}
+
+.sidebar-container.icons-only .sidebar-item.active {
+  border-right-width: 3px;
+}
+
+/* Tooltip for icons-only mode */
+.tooltip {
+  position: absolute;
+  right: 70px;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  transform: translateX(10px);
+  z-index: 1001;
+  pointer-events: none;
+  display: none;
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: transparent transparent transparent var(--primary-color);
+}
+
+.sidebar-item:hover .tooltip {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* زر التبديل للشاشات الصغيرة */
+.toggle-sidebar {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 5px;
+}
+
+/* زر تبديل وضع الأيقونات */
+.toggle-icons-mode {
+  position: absolute;
+  left: 10px;
+  top: 17px;
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 5px;
+  z-index: 10;
+  transition: transform 0.3s ease, background-color 0.3s;
+  display: block;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.toggle-icons-mode:hover {
+  background-color: rgba(97, 83, 244, 0.1);
+}
+
+.icons-only .toggle-icons-mode {
+  transform: rotate(180deg);
+}
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 900;
+  transition: all 0.3s ease;
+}
+
+/* تطبيق الاستجابة للشاشات المختلفة */
+
+/* تابلت (حتى 992px) */
+@media screen and (max-width: 992px) {
+  .sidebar-container {
+    width: 220px;
+  }
+  
+  .sidebar-container.icons-only {
+    width: 70px;
+  }
+  
+  .sidebar-item {
+    padding: 10px 15px;
+  }
+  
+  .logo-text h3 {
+    font-size: 16px;
+  }
+  
+  .logo-text p {
+    font-size: 10px;
+  }
+}
+
+/* الهواتف الكبيرة (حتى 768px) */
+@media screen and (max-width: 768px) {
+  .sidebar-container {
+    position: fixed;
+    right: -250px; /* إخفاء السايد بار خارج الشاشة */
+    width: 250px;
+  }
+  
+  .sidebar-container.open {
+    right: 0; /* إظهار السايد بار عند الضغط على زر التبديل */
+  }
+  
+  .sidebar-container.icons-only {
+    width: 70px;
+    right: -70px;
+  }
+  
+  .sidebar-container.icons-only.open {
+    right: 0;
+  }
+  
+  .toggle-sidebar {
+    display: block;
+    position: fixed;
+    top: 15px;
+    right: 15px;
+    z-index: 1001;
+  }
+  
+  .mobile-overlay.visible {
+    display: block;
+  }
+  
+  /* إخفاء التلميحات على الشاشات الصغيرة لتجنب مشاكل العرض */
+  .tooltip {
+    display: none !important;
+  }
+}
+
+/* الهواتف الصغيرة (حتى 576px) */
+@media screen and (max-width: 576px) {
+  .sidebar-container {
+    width: 85%;
+    max-width: 300px;
+  }
+  
+  .sidebar-container.icons-only {
+    width: 70px;
+  }
+  
+  .sidebar-item {
+    padding: 12px 15px;
+    font-size: 14px;
+  }
+  
+  .logo-container {
+    justify-content: center;
+  }
+} 

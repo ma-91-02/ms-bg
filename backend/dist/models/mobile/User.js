@@ -32,46 +32,114 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const userSchema = new mongoose_1.Schema({
     phoneNumber: {
         type: String,
-        required: [true, 'رقم الهاتف مطلوب'],
+        required: [true, 'Phone number is required'],
         unique: true,
         trim: true
     },
-    otp: {
-        type: String
+    fullName: {
+        type: String,
+        trim: true
     },
-    otpExpires: {
+    lastName: {
+        type: String,
+        trim: true
+    },
+    email: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        validate: {
+            validator: function (v) {
+                return !v || /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v);
+            },
+            message: 'يرجى تقديم بريد إلكتروني صالح'
+        }
+    },
+    password: {
+        type: String,
+        minlength: [6, 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل']
+    },
+    birthDate: {
         type: Date
     },
-    userType: {
+    address: {
+        type: String
+    },
+    profileImage: {
+        type: String
+    },
+    points: {
+        type: Number,
+        default: 0
+    },
+    isBlocked: {
+        type: Boolean,
+        default: false
+    },
+    isAdmin: {
+        type: Boolean,
+        default: false
+    },
+    otp: {
         type: String,
-        enum: ['finder', 'loser']
+        required: false
     },
-    name: {
-        type: String
-    },
-    idNumber: {
-        type: String
+    otpExpires: {
+        type: Date,
+        required: false
     },
     isProfileComplete: {
         type: Boolean,
         default: false
+    },
+    favorites: {
+        type: [mongoose_1.default.Types.ObjectId],
+        ref: 'Advertisement'
     }
 }, {
     timestamps: true
 });
-// التحقق مما إذا كان OTP صالحًا ولم تنتهي صلاحيته
-userSchema.methods.compareOTP = function (candidateOTP) {
-    // إذا انتهت مدة صلاحية OTP
-    if (this.otpExpires && this.otpExpires < new Date()) {
-        return false;
+// تشفير كلمة المرور قبل الحفظ
+userSchema.pre('save', async function (next) {
+    const user = this;
+    // فقط إذا تم تعديل كلمة المرور أو كانت جديدة
+    if (user.password && (user.isModified('password') || user.isNew)) {
+        try {
+            const salt = await bcryptjs_1.default.genSalt(10);
+            const hash = await bcryptjs_1.default.hash(user.password, salt);
+            user.password = hash;
+            next();
+        }
+        catch (error) {
+            return next(error);
+        }
     }
-    // التحقق من مطابقة OTP
-    return this.otp === candidateOTP;
+    else {
+        return next();
+    }
+});
+// طريقة للتحقق من كلمة المرور
+userSchema.methods.comparePassword = async function (password) {
+    try {
+        // إذا لم يكن لدى المستخدم كلمة مرور (تم إنشاؤه من OTP فقط)
+        if (!this.password) {
+            return false;
+        }
+        return await bcryptjs_1.default.compare(password, this.password);
+    }
+    catch (error) {
+        throw error;
+    }
 };
 const User = mongoose_1.default.model('User', userSchema);
 exports.default = User;
+//# sourceMappingURL=User.js.map
