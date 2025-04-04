@@ -68,7 +68,7 @@ export const createUploadMiddleware = (options: {
 // وسائط جاهزة للاستخدام الشائع
 export const uploadProfileImage = createUploadMiddleware({
   folder: 'profiles',
-  fieldName: 'profileImage',
+  fieldName: 'image',
   maxSize: 2 * 1024 * 1024, // 2 ميجابايت
 });
 

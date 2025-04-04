@@ -1,0 +1,1 @@
+{"version":3,"file":"notifications.d.ts","sourceRoot":"","sources":["../../../src/types/mobile/notifications.ts"],"names":[],"mappings":"AAAA;;GAEG;AACH,oBAAY,gBAAgB;IAC1B,aAAa,kBAAkB,CAAK,4BAA4B;IAChE,aAAa,kBAAkB,CAAK,mBAAmB;IACvD,eAAe,oBAAoB,CAAE,gBAAgB;IACrD,gBAAgB,qBAAqB,CAAE,mBAAmB;IAC1D,gBAAgB,qBAAqB,CAAE,kBAAkB;IACzD,MAAM,WAAW;CAClB;AAED,eAAe,gBAAgB,CAAC"}

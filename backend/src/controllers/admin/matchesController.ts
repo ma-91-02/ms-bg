@@ -17,12 +17,21 @@ export const getPendingMatches = async (req: AuthRequest, res: Response) => {
 
     console.log('🔍 جاري تحديث وعرض المطابقات المحتملة...');
     
-    // 1. حذف جميع المطابقات المعلقة (بدلاً من محاولة تنظيفها)
-    console.log('🗑️ حذف جميع المطابقات المعلقة السابقة...');
+    // 1. قبل حذف المطابقات المعلقة، نحفظ المطابقات المعتمدة والمرفوضة
+    console.log('🔄 التحقق من المطابقات الحالية...');
+    
+    // نحتفظ فقط بالمطابقات المعتمدة والمرفوضة
+    const existingApprovedRejectedMatches = await AdvertisementMatch.find({
+      status: { $in: [MatchStatus.APPROVED, MatchStatus.REJECTED] }
+    });
+    console.log(`ℹ️ تم العثور على ${existingApprovedRejectedMatches.length} مطابقة معتمدة/مرفوضة`);
+    
+    // 2. حذف المطابقات المعلقة فقط
+    console.log('🗑️ حذف المطابقات المعلقة السابقة...');
     const deleteResult = await AdvertisementMatch.deleteMany({ status: MatchStatus.PENDING });
     console.log(`تم حذف ${deleteResult.deletedCount} مطابقة معلقة سابقة`);
     
-    // 2. إنشاء مطابقات جديدة من الإعلانات المعتمدة فقط
+    // 3. إنشاء مطابقات جديدة من الإعلانات المعتمدة فقط
     console.log('🔄 إنشاء مطابقات جديدة من الإعلانات المعتمدة...');
     
     // جلب جميع الإعلانات المعتمدة وغير المحلولة
@@ -36,55 +45,106 @@ export const getPendingMatches = async (req: AuthRequest, res: Response) => {
     // إنشاء مصفوفة تخزن جميع عمليات المطابقة المحتملة
     const potentialMatches = [];
     
+    // إنشاء مجموعة للتحقق من وجود مطابقات مسبقة
+    const existingMatchesSet = new Set();
+    
+    // إضافة المطابقات الحالية إلى المجموعة لتجنب التكرار
+    existingApprovedRejectedMatches.forEach(match => {
+      const key1 = `${match.lostAdvertisementId.toString()}-${match.foundAdvertisementId.toString()}`;
+      const key2 = `${match.foundAdvertisementId.toString()}-${match.lostAdvertisementId.toString()}`;
+      existingMatchesSet.add(key1);
+      existingMatchesSet.add(key2);
+    });
+    
     // البحث عن جميع الإعلانات المفقودة
     const lostAds = advertisements.filter(ad => ad.type === 'lost');
+    console.log(`💼 العثور على ${lostAds.length} إعلان مفقود`);
+    
     // البحث عن جميع الإعلانات الموجودة
     const foundAds = advertisements.filter(ad => ad.type === 'found');
+    console.log(`🔍 العثور على ${foundAds.length} إعلان موجود`);
     
-    console.log(`📋 تم العثور على ${lostAds.length} إعلان مفقودات و ${foundAds.length} إعلان موجودات`);
-    
-    // المقارنة اليدوية بين الإعلانات (بدون تكرار)
+    // مقارنة المفقودات مع الموجودات
     for (const lostAd of lostAds) {
       for (const foundAd of foundAds) {
-        // التأكد من أن الفئة والمحافظة متطابقة
-        if (lostAd.category === foundAd.category && lostAd.governorate === foundAd.governorate) {
-          // حساب درجات التشابه لمختلف الحقول
-          const matchingFields = [];
-          let totalScore = 0;
+        // التحقق من وجود هذه المطابقة مسبقاً (في المطابقات المعتمدة/المرفوضة)
+        const lostAdId = lostAd._id?.toString() || '';
+        const foundAdId = foundAd._id?.toString() || '';
+        const matchKey1 = `${lostAdId}-${foundAdId}`;
+        const matchKey2 = `${foundAdId}-${lostAdId}`;
+        
+        if (existingMatchesSet.has(matchKey1) || existingMatchesSet.has(matchKey2)) {
+          console.log(`⚠️ تجاهل مطابقة موجودة مسبقاً: ${matchKey1}`);
+          continue;
+        }
+        
+        // التحقق من تطابق الفئة (إذا كانت متوفرة)
+        if (lostAd.category && foundAd.category && lostAd.category !== foundAd.category) {
+          continue;
+        }
+        
+        // حساب درجات التشابه لمختلف الحقول
+        const matchingFields: string[] = [];
+        let totalScore = 0;
+        
+        // 1. فحص تطابق المحافظة
+        if (lostAd.governorate && foundAd.governorate && lostAd.governorate === foundAd.governorate) {
+          matchingFields.push('governorate');
+          totalScore += 10;
+        }
+        
+        // 2. فحص تطابق رقم المستند
+        if (lostAd.itemNumber && foundAd.itemNumber) {
+          // تنظيف الأرقام للمقارنة
+          const cleanLostNumber = lostAd.itemNumber.replace(/\s/g, '');
+          const cleanFoundNumber = foundAd.itemNumber.replace(/\s/g, '');
           
-          // فحص تطابق رقم المستند (إذا كان موجوداً)
-          if (lostAd.itemNumber && foundAd.itemNumber && lostAd.itemNumber === foundAd.itemNumber) {
+          if (cleanLostNumber === cleanFoundNumber) {
             matchingFields.push('itemNumber');
-            totalScore += 60; // رقم المستند مهم جداً - وزن أعلى
+            totalScore += 60;
+          } else if (cleanLostNumber.includes(cleanFoundNumber) || cleanFoundNumber.includes(cleanLostNumber)) {
+            matchingFields.push('itemNumber_partial');
+            totalScore += 40;
           }
-          
-          // فحص تطابق اسم المالك (إذا كان موجوداً)
-          if (lostAd.ownerName && foundAd.ownerName) {
-            const nameSimilarity = calculateSimilarity(lostAd.ownerName, foundAd.ownerName);
-            if (nameSimilarity > 70) {
-              matchingFields.push('ownerName');
-              totalScore += 30; // اسم المالك مهم - وزن متوسط
-            }
+        }
+        
+        // 3. فحص تطابق الاسم
+        if (lostAd.ownerName && foundAd.ownerName) {
+          const nameSimilarity = calculateSimilarity(lostAd.ownerName, foundAd.ownerName);
+          if (nameSimilarity >= 70) {
+            matchingFields.push('ownerName');
+            totalScore += 30;
+          } else if (nameSimilarity >= 40) {
+            matchingFields.push('ownerName_partial');
+            totalScore += 20;
           }
-          
-          // فحص تطابق الوصف
+        }
+        
+        // 4. فحص تطابق الوصف
+        if (lostAd.description && foundAd.description) {
           const descriptionSimilarity = calculateSimilarity(lostAd.description, foundAd.description);
-          if (descriptionSimilarity > 50) {
+          if (descriptionSimilarity >= 60) {
             matchingFields.push('description');
-            totalScore += 10; // الوصف له أهمية أقل - وزن أقل
+            totalScore += 10;
           }
+        }
+        
+        // إذا كان هناك تطابق كافي، أضف إلى المطابقات المحتملة
+        if (totalScore > 20 || matchingFields.length > 0) {
+          // إضافة مفتاح هذه المطابقة إلى المجموعة لمنع إضافتها مرة أخرى
+          existingMatchesSet.add(matchKey1);
+          existingMatchesSet.add(matchKey2);
           
-          // إذا كان هناك تطابق كافي، أضف إلى المطابقات المحتملة
-          if (totalScore > 20 || matchingFields.length > 0) {
-            potentialMatches.push({
-              lostAdvertisementId: lostAd._id,
-              foundAdvertisementId: foundAd._id,
-              matchScore: totalScore,
-              matchingFields,
-              status: MatchStatus.PENDING,
-              notificationSent: false
-            });
-          }
+          console.log(`⭐ مطابقة جديدة محتملة: المفقود ${lostAdId} مع الموجود ${foundAdId} (${totalScore}%)`);
+          
+          potentialMatches.push({
+            lostAdvertisementId: lostAdId,
+            foundAdvertisementId: foundAdId,
+            matchScore: totalScore,
+            matchingFields,
+            status: MatchStatus.PENDING,
+            notificationSent: false
+          });
         }
       }
     }
@@ -94,7 +154,11 @@ export const getPendingMatches = async (req: AuthRequest, res: Response) => {
       await AdvertisementMatch.insertMany(potentialMatches);
     }
     
-    console.log(`✅ تم إنشاء ${potentialMatches.length} مطابقة محتملة`);
+    console.log(`✅ تم إنشاء ${potentialMatches.length} مطابقة محتملة جديدة`);
+    
+    // تنظيف المطابقات المكررة (للتأكد)
+    const dupeCheck = await cleanupDuplicateMatchesInternal();
+    console.log(`🧹 تم حذف ${dupeCheck.deletedCount} مطابقة مكررة أثناء التنظيف النهائي`);
     
     // 3. عرض المطابقات المعلقة
     const { page = 1, limit = 10 } = req.query;
@@ -143,6 +207,45 @@ export const getPendingMatches = async (req: AuthRequest, res: Response) => {
       error: error.message
     });
   }
+};
+
+// دالة داخلية لتنظيف المطابقات المكررة
+const cleanupDuplicateMatchesInternal = async () => {
+  // جلب جميع المطابقات
+  const allMatches = await AdvertisementMatch.find({});
+  
+  // تتبع المطابقات الفريدة
+  const uniqueMatchPairs = new Set();
+  const duplicateIds: any[] = [];
+  
+  // تحديد المطابقات المكررة
+  for (const match of allMatches) {
+    // تخزين معرف المطابقة بترتيب ثابت
+    const lostId = match.lostAdvertisementId.toString();
+    const foundId = match.foundAdvertisementId.toString();
+    
+    // إنشاء معرف فريد باستخدام المعرفين، بغض النظر عن ترتيبهما
+    const matchPair = [lostId, foundId].sort().join('--');
+    
+    if (uniqueMatchPairs.has(matchPair)) {
+      // حفظ معرف المطابقة المكررة
+      duplicateIds.push(match._id);
+    } else {
+      // تسجيل هذه المطابقة كمطابقة فريدة
+      uniqueMatchPairs.add(matchPair);
+    }
+  }
+  
+  // حذف المطابقات المكررة
+  const deleteResult = await AdvertisementMatch.deleteMany({
+    _id: { $in: duplicateIds }
+  });
+  
+  return {
+    uniqueMatchesCount: uniqueMatchPairs.size,
+    deletedCount: deleteResult.deletedCount,
+    deleteResult
+  };
 };
 
 // إضافة دالة تشابه النصوص (إذا لم تكن موجودة في هذا الملف)
@@ -568,6 +671,119 @@ export const getMatchHistory = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ في الخادم',
+      error: error.message
+    });
+  }
+};
+
+// إضافة مجموعة من المطابقات المحتملة دفعة واحدة
+export const bulkCreateMatches = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.admin) {
+      return res.status(401).json({
+        success: false,
+        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
+      });
+    }
+
+    const { matches } = req.body;
+    
+    if (!matches || !Array.isArray(matches) || matches.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'لم يتم توفير مطابقات صالحة'
+      });
+    }
+    
+    console.log(`🔍 إضافة ${matches.length} مطابقة محتملة جديدة...`);
+    
+    // حذف المطابقات المكررة
+    const uniqueMatchPairs = new Set();
+    const uniqueMatches = [];
+    
+    for (const match of matches) {
+      const { lostAdvertisementId, foundAdvertisementId, matchScore, matchingFields } = match;
+      
+      // التحقق من توفر المعرفات الضرورية
+      if (!lostAdvertisementId || !foundAdvertisementId) {
+        console.warn('تم تخطي مطابقة غير صالحة - معرفات مفقودة');
+        continue;
+      }
+      
+      // إنشاء مفتاح فريد للتحقق من التكرار
+      const pairKey = `${lostAdvertisementId}:${foundAdvertisementId}`;
+      const reversePairKey = `${foundAdvertisementId}:${lostAdvertisementId}`;
+      
+      if (uniqueMatchPairs.has(pairKey) || uniqueMatchPairs.has(reversePairKey)) {
+        console.log(`تم تخطي مطابقة مكررة: ${pairKey}`);
+        continue;
+      }
+      
+      // إضافة المطابقة الفريدة
+      uniqueMatchPairs.add(pairKey);
+      uniqueMatches.push({
+        lostAdvertisementId,
+        foundAdvertisementId,
+        matchScore: matchScore || 0,
+        matchingFields: matchingFields || [],
+        status: MatchStatus.PENDING,
+        notificationSent: false
+      });
+    }
+    
+    // التحقق من وجود مطابقات فريدة
+    if (uniqueMatches.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'لا توجد مطابقات فريدة للإضافة',
+        addedCount: 0
+      });
+    }
+    
+    // التحقق أولاً من المطابقات الموجودة بالفعل في قاعدة البيانات
+    const existingMatches = await Promise.all(
+      uniqueMatches.map(match => 
+        AdvertisementMatch.findOne({
+          $or: [
+            { 
+              lostAdvertisementId: match.lostAdvertisementId, 
+              foundAdvertisementId: match.foundAdvertisementId 
+            },
+            { 
+              lostAdvertisementId: match.foundAdvertisementId, 
+              foundAdvertisementId: match.lostAdvertisementId 
+            }
+          ]
+        })
+      )
+    );
+    
+    // تصفية المطابقات التي لا توجد بالفعل في قاعدة البيانات
+    const newMatches = uniqueMatches.filter((_, index) => !existingMatches[index]);
+    
+    if (newMatches.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'جميع المطابقات موجودة بالفعل في قاعدة البيانات',
+        addedCount: 0
+      });
+    }
+    
+    // إضافة المطابقات الجديدة إلى قاعدة البيانات
+    console.log(`✨ إضافة ${newMatches.length} مطابقة جديدة إلى قاعدة البيانات...`);
+    const result = await AdvertisementMatch.insertMany(newMatches);
+    
+    return res.status(201).json({
+      success: true,
+      message: `تمت إضافة ${result.length} مطابقة جديدة بنجاح`,
+      addedCount: result.length,
+      totalSubmitted: matches.length
+    });
+  } catch (error: any) {
+    console.error('❌ خطأ في إضافة المطابقات:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم أثناء إضافة المطابقات',
       error: error.message
     });
   }

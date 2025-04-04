@@ -9,6 +9,7 @@ export const createContactRequest = async (req: Request, res: Response) => {
   try {
     const authReq = req as AuthRequest;
     if (!authReq.user || !authReq.user.id) {
+      console.error('❌ فشل في إنشاء طلب تواصل - لم يتم العثور على معلومات المستخدم');
       return res.status(401).json({
         success: false,
         message: 'غير مصرح به. يرجى تسجيل الدخول'
@@ -16,8 +17,15 @@ export const createContactRequest = async (req: Request, res: Response) => {
     }
 
     const { advertisementId, reason } = req.body;
+    console.log('📩 طلب إنشاء طلب تواصل جديد:', {
+      user: authReq.user.id,
+      advertisementId,
+      reason,
+      body: req.body
+    });
 
     if (!advertisementId || !reason) {
+      console.error('❌ معرف الإعلان أو سبب الطلب مفقود');
       return res.status(400).json({
         success: false,
         message: 'معرف الإعلان وسبب طلب التواصل مطلوبان'
@@ -28,14 +36,22 @@ export const createContactRequest = async (req: Request, res: Response) => {
     const advertisement = await Advertisement.findById(advertisementId);
 
     if (!advertisement) {
+      console.error(`❌ لم يتم العثور على الإعلان بالمعرف: ${advertisementId}`);
       return res.status(404).json({
         success: false,
         message: 'الإعلان غير موجود'
       });
     }
 
+    console.log('✅ تم العثور على الإعلان:', {
+      adId: advertisement._id,
+      adType: advertisement.type,
+      adOwner: advertisement.userId
+    });
+
     // التحقق من أن المستخدم لا يحاول التواصل مع إعلان خاص به
     if (advertisement.userId.toString() === authReq.user.id) {
+      console.error('❌ المستخدم يحاول التواصل مع إعلان خاص به');
       return res.status(400).json({
         success: false,
         message: 'لا يمكن طلب التواصل مع إعلان خاص بك'
@@ -50,6 +66,7 @@ export const createContactRequest = async (req: Request, res: Response) => {
     });
 
     if (existingRequest) {
+      console.error('❌ يوجد طلب تواصل قيد الانتظار لهذا الإعلان');
       return res.status(400).json({
         success: false,
         message: 'لديك طلب تواصل قيد الانتظار لهذا الإعلان'
@@ -65,6 +82,13 @@ export const createContactRequest = async (req: Request, res: Response) => {
     });
 
     await contactRequest.save();
+    
+    console.log('✅ تم إنشاء طلب تواصل جديد بنجاح:', {
+      requestId: contactRequest._id,
+      userId: contactRequest.userId,
+      advertisementId: contactRequest.advertisementId,
+      advertiserUserId: contactRequest.advertiserUserId
+    });
 
     return res.status(201).json({
       success: true,
@@ -72,7 +96,7 @@ export const createContactRequest = async (req: Request, res: Response) => {
       data: contactRequest
     });
   } catch (error: any) {
-    console.error('خطأ في إنشاء طلب التواصل:', error);
+    console.error('❌ خطأ غير متوقع في إنشاء طلب التواصل:', error);
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ في الخادم',

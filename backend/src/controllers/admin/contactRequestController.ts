@@ -6,12 +6,14 @@ import { AuthRequest } from '../../types/express';
 export const getPendingContactRequests = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.admin) {
+      console.log('❌ طلب غير مصرح به - الوصول إلى طلبات التواصل المعلقة');
       return res.status(401).json({
         success: false,
         message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
       });
     }
 
+    console.log('📥 طلب جلب طلبات التواصل المعلقة من المشرف:', req.admin._id);
     const { page = 1, limit = 10 } = req.query;
 
     // بناء الفلتر - فقط الطلبات المعلقة
@@ -19,6 +21,7 @@ export const getPendingContactRequests = async (req: AuthRequest, res: Response)
 
     // الحصول على إجمالي عدد الطلبات
     const total = await ContactRequest.countDocuments(filter);
+    console.log(`📊 إجمالي عدد طلبات التواصل المعلقة: ${total}`);
 
     // حساب التخطي والحد
     const skip = (Number(page) - 1) * Number(limit);
@@ -32,6 +35,8 @@ export const getPendingContactRequests = async (req: AuthRequest, res: Response)
       .populate('advertisementId', 'type category governorate description')
       .populate('advertiserUserId', 'fullName phoneNumber');
 
+    console.log(`✅ تم جلب ${contactRequests.length} طلب تواصل معلق`);
+
     return res.status(200).json({
       success: true,
       count: contactRequests.length,
@@ -41,7 +46,7 @@ export const getPendingContactRequests = async (req: AuthRequest, res: Response)
       data: contactRequests
     });
   } catch (error: any) {
-    console.error('خطأ في الحصول على طلبات التواصل:', error);
+    console.error('❌ خطأ في الحصول على طلبات التواصل المعلقة:', error);
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ في الخادم',
@@ -54,12 +59,14 @@ export const getPendingContactRequests = async (req: AuthRequest, res: Response)
 export const getAllContactRequests = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.admin) {
+      console.log('❌ طلب غير مصرح به - الوصول إلى جميع طلبات التواصل');
       return res.status(401).json({
         success: false,
         message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
       });
     }
 
+    console.log('📥 طلب جلب جميع طلبات التواصل من المشرف:', req.admin._id);
     const { status, page = 1, limit = 10 } = req.query;
 
     // بناء الفلتر
@@ -67,10 +74,12 @@ export const getAllContactRequests = async (req: AuthRequest, res: Response) => 
     
     if (status) {
       filter.status = status;
+      console.log(`📋 تصفية طلبات التواصل حسب الحالة: ${status}`);
     }
 
     // الحصول على إجمالي عدد الطلبات
     const total = await ContactRequest.countDocuments(filter);
+    console.log(`📊 إجمالي عدد طلبات التواصل: ${total}`);
 
     // حساب التخطي والحد
     const skip = (Number(page) - 1) * Number(limit);
@@ -84,6 +93,8 @@ export const getAllContactRequests = async (req: AuthRequest, res: Response) => 
       .populate('advertisementId', 'type category governorate description')
       .populate('advertiserUserId', 'fullName phoneNumber');
 
+    console.log(`✅ تم جلب ${contactRequests.length} طلب تواصل`);
+
     return res.status(200).json({
       success: true,
       count: contactRequests.length,
@@ -93,7 +104,7 @@ export const getAllContactRequests = async (req: AuthRequest, res: Response) => 
       data: contactRequests
     });
   } catch (error: any) {
-    console.error('خطأ في الحصول على طلبات التواصل:', error);
+    console.error('❌ خطأ في الحصول على طلبات التواصل:', error);
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ في الخادم',

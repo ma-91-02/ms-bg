@@ -16,12 +16,15 @@
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
     "axios": "^1.8.4",
+    "bootstrap": "^5.3.4",
     "formik": "^2.4.6",
     "react": "^19.0.0",
+    "react-bootstrap": "^2.10.9",
     "react-dom": "^19.0.0",
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.4.0",
     "react-scripts": "5.0.1",
+    "recharts": "^2.15.2",
     "sass": "^1.86.0",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4",
@@ -29,6 +32,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "dev": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

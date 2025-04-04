@@ -1,0 +1,600 @@
+/* تنسيق صفحة المطابقات */
+.matches-list-container {
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+/* ترويسة الصفحة */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.section-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+/* أنماط حقول البحث والتصفية */
+.search-filter-container {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.search-input {
+  min-width: 250px;
+  padding: 8px 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.filter-select {
+  min-width: 150px;
+  padding: 8px 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+}
+
+.refresh-btn {
+  padding: 8px 15px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.refresh-btn .fas {
+  font-size: 14px;
+}
+
+/* أنماط الحالة الفارغة */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 50px 20px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: #ccc;
+  margin-bottom: 15px;
+}
+
+.empty-state p {
+  margin-bottom: 20px;
+  color: #666;
+  font-size: 16px;
+}
+
+/* أنماط جدول المطابقات */
+.matches-table-container {
+  overflow-x: auto;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
+}
+
+.matches-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.matches-table th,
+.matches-table td {
+  padding: 12px 15px;
+  text-align: right;
+  border-bottom: 1px solid #eee;
+}
+
+.matches-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+}
+
+.matches-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.pending-row {
+  background-color: #fffef0;
+}
+
+/* أنماط خلايا جدول المطابقات */
+.advertisement-cell {
+  min-width: 250px;
+}
+
+.ad-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ad-title {
+  font-weight: 600;
+  color: #1976d2;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.ad-title:hover {
+  color: #0d47a1;
+  text-decoration: underline;
+}
+
+.ad-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  color: #666;
+}
+
+.ad-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ad-meta .fas {
+  color: #777;
+  font-size: 12px;
+}
+
+.not-available {
+  color: #999;
+  font-style: italic;
+  font-size: 14px;
+}
+
+/* أنماط رابط واتساب */
+.whatsapp-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #25D366;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.whatsapp-link:hover {
+  background-color: #25D366;
+  color: white;
+}
+
+.whatsapp-link .fab {
+  font-size: 14px;
+}
+
+/* أنماط نسبة المطابقة */
+.match-score {
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  min-width: 60px;
+  text-align: center;
+}
+
+.high-match {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.medium-match {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.low-match {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+/* أنماط شارات الحالة */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-warning {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+}
+
+.badge-success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.badge-danger {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.badge-secondary {
+  background-color: #e2e3e5;
+  color: #383d41;
+  border: 1px solid #d6d8db;
+}
+
+/* أنماط أزرار الإجراءات */
+.action-buttons {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.action-buttons button {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background-color 0.2s;
+}
+
+.action-buttons button:hover {
+  opacity: 0.9;
+}
+
+.rejection-reason {
+  font-size: 13px;
+  color: #721c24;
+  margin-top: 5px;
+  padding: 5px;
+  border-radius: 4px;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  cursor: help;
+}
+
+.rejection-reason .fas {
+  margin-left: 5px;
+}
+
+/* أنماط أزرار التنقل بين الصفحات */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.pagination-button {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  background-color: white;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  color: #333;
+  font-size: 14px;
+}
+
+.pagination-button:hover:not(:disabled) {
+  background-color: #f5f5f5;
+}
+
+.pagination-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  color: #666;
+  font-size: 14px;
+}
+
+/* تكييف الصفحة للشاشات المتوسطة */
+@media (max-width: 992px) {
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .search-filter-container {
+    width: 100%;
+    flex-direction: column;
+  }
+  
+  .search-input, .filter-select {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .refresh-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .matches-table th,
+  .matches-table td {
+    padding: 8px;
+    font-size: 14px;
+  }
+  
+  .matching-system-info summary {
+    text-align: center;
+  }
+}
+
+/* تكييف الصفحة للهواتف المحمولة */
+@media (max-width: 768px) {
+  .matches-list-container {
+    padding: 15px 10px;
+  }
+  
+  .section-header h2 {
+    font-size: 20px;
+    text-align: center;
+    width: 100%;
+  }
+  
+  /* تغيير عرض الجدول ليظهر كبطاقات على الهواتف */
+  .matches-table {
+    display: block;
+  }
+  
+  .matches-table thead {
+    display: none; /* إخفاء رأس الجدول على الموبايل */
+  }
+  
+  .matches-table tbody {
+    display: block;
+  }
+  
+  .matches-table tr {
+    display: block;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .matches-table td {
+    display: block;
+    text-align: right;
+    padding: 8px 5px;
+    border-bottom: 1px solid #eee;
+    position: relative;
+    padding-right: 120px; /* مساحة لعنوان العمود */
+  }
+  
+  .matches-table td:last-child {
+    border-bottom: none;
+  }
+  
+  /* إضافة عناوين مخصصة لكل خلية */
+  .matches-table td::before {
+    content: attr(data-label);
+    position: absolute;
+    right: 5px;
+    width: 110px;
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .advertisement-cell {
+    min-width: auto;
+  }
+  
+  .action-buttons {
+    justify-content: center;
+  }
+  
+  .action-buttons button {
+    padding: 8px 15px;
+    font-size: 14px;
+  }
+  
+  .pagination-container {
+    flex-wrap: wrap;
+  }
+}
+
+/* تكييف الصفحة للهواتف الصغيرة جدًا */
+@media (max-width: 480px) {
+  .matches-list-container {
+    padding: 10px 5px;
+  }
+  
+  .section-header h2 {
+    font-size: 18px;
+  }
+  
+  .matches-table td {
+    padding-right: 0; /* إزالة المساحة في الهواتف الصغيرة جدًا */
+    padding-top: 25px; /* إضافة مساحة للعنوان من الأعلى */
+  }
+  
+  .matches-table td::before {
+    position: static;
+    display: block;
+    width: 100%;
+    margin-bottom: 5px;
+    margin-top: -20px;
+  }
+  
+  .ad-meta {
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .matching-system-info .info-content {
+    padding: 5px;
+  }
+  
+  .matching-system-info ul {
+    padding-right: 10px;
+  }
+}
+
+/* تنسيق الفورم جروب للنوافذ المنبثقة */
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+textarea.form-control {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* تحسين مظهر الألرت */
+.alert {
+  padding: 12px 15px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+.alert-success {
+  background-color: #d4edda;
+  color: #155724;
+  border-color: #c3e6cb;
+}
+
+.alert-danger {
+  background-color: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
+
+.alert-dismissible {
+  padding-left: 40px;
+}
+
+.btn-close {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  padding: 0.25rem 0.25rem;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 1.25rem;
+  font-weight: 700;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.btn-close:hover {
+  opacity: 1;
+}
+
+/* أنماط قسم معلومات نظام المطابقة */
+.matching-system-info {
+  margin: 10px 0 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid #e9ecef;
+}
+
+.matching-system-info details {
+  width: 100%;
+}
+
+.matching-system-info summary {
+  cursor: pointer;
+  padding: 5px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #2c3e50;
+}
+
+.matching-system-info summary:hover {
+  color: #0056b3;
+}
+
+.matching-system-info summary i {
+  margin-right: 5px;
+  color: #6c757d;
+}
+
+.matching-system-info .info-content {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.matching-system-info ul {
+  padding-right: 20px;
+  margin: 10px 0;
+}
+
+.matching-system-info li {
+  margin-bottom: 5px;
+} 

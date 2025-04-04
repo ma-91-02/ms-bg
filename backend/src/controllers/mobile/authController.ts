@@ -6,6 +6,8 @@ import whatsappService from '../../services/common/whatsappService';
 import { sendSuccess, sendError } from '../../utils/common/responseGenerator';
 import { AuthRequest } from '../../types/express';
 import Otp from '../../models/mobile/Otp';
+import path from 'path';
+import fs from 'fs';
 
 // إنشاء JWT token
 const signToken = (id: string): string => {
@@ -16,13 +18,27 @@ const signToken = (id: string): string => {
 // إرسال رمز OTP
 export const sendOTP = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber } = req.body;
+    const { phoneNumber, isRegistration } = req.body;
     
     if (!phoneNumber) {
       return res.status(400).json({
         success: false,
         message: 'رقم الهاتف مطلوب'
       });
+    }
+    
+    // إذا كانت عملية تسجيل، نتحقق من وجود المستخدم مسبقاً
+    if (isRegistration) {
+      // التحقق مما إذا كان المستخدم موجوداً بالفعل
+      const existingUser = await User.findOne({ phoneNumber });
+      
+      if (existingUser && existingUser.isProfileComplete) {
+        return res.status(400).json({
+          success: false,
+          message: 'هذا الرقم مسجل بالفعل في التطبيق، يرجى تسجيل الدخول بدلاً من إنشاء حساب جديد',
+          userExists: true
+        });
+      }
     }
     
     // توليد رمز OTP مكون من 6 أرقام
@@ -437,6 +453,370 @@ export const getUserProfile = async (req: Request, res: Response): Promise<Respo
       success: false,
       message: 'حدث خطأ أثناء الحصول على ملف المستخدم الشخصي',
       error: error.message
+    });
+  }
+};
+
+// تحديث الملف الشخصي
+export const updateProfile = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    // التحقق من وجود المستخدم
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'غير مصرح به. يرجى تسجيل الدخول'
+      });
+    }
+
+    const userId = req.user._id;
+    const { firstName, lastName, email, phoneNumber } = req.body;
+
+    // جلب المستخدم أولاً
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'لم يتم العثور على المستخدم'
+      });
+    }
+    
+    // تحديث بيانات المستخدم
+    if (firstName) user.fullName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (email) user.email = email;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    
+    // حفظ المستخدم
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'تم تحديث الملف الشخصي بنجاح',
+      user: {
+        id: user._id,
+        phoneNumber: user.phoneNumber,
+        fullName: user.fullName,
+        lastName: user.lastName || '',
+        email: user.email || '',
+        profileImage: user.profileImage || ''
+      }
+    });
+  } catch (error: any) {
+    console.error('خطأ في تحديث الملف الشخصي:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث الملف الشخصي',
+      error: error.message
+    });
+  }
+};
+
+// رفع صورة الملف الشخصي
+export const uploadProfileImage = async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'لم يتم تحميل أي صورة'
+      });
+    }
+
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'غير مصرح لك برفع الصورة'
+      });
+    }
+
+    // البحث عن المستخدم وحذف الصورة القديمة
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'لم يتم العثور على المستخدم'
+      });
+    }
+
+    console.log('Original file path:', req.file.path);
+    console.log('Original file name:', req.file.filename);
+
+    if (user.profileImage) {
+      const oldImagePath = path.join(__dirname, '..', '..', '..', 'uploads', user.profileImage);
+      console.log('Old image path:', oldImagePath);
+      try {
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath);
+          console.log('Old image deleted successfully');
+        } else {
+          console.log('Old image not found at path:', oldImagePath);
+        }
+      } catch (error) {
+        console.error('Error deleting old image:', error);
+        // Continue with the update even if old image deletion fails
+      }
+    }
+
+    // تحديث مسار الصورة في قاعدة البيانات
+    const profileImagePath = req.file.path.replace(/\\/g, '/').split('uploads/')[1];
+    console.log('New profile image path:', profileImagePath);
+    
+    // تحديث المستخدم مع التأكد من حفظ جميع الحقول
+    user.profileImage = profileImagePath;
+    await user.save();
+    console.log('User updated with new profile image path');
+
+    // إرجاع المستخدم المحدث مع جميع البيانات
+    return res.status(200).json({
+      success: true,
+      message: 'تم تحديث صورة الملف الشخصي بنجاح',
+      data: {
+        user: {
+          id: user._id,
+          phoneNumber: user.phoneNumber,
+          fullName: user.fullName,
+          lastName: user.lastName || '',
+          email: user.email || '',
+          profileImage: user.profileImage,
+          isProfileComplete: user.isProfileComplete
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error uploading profile image:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء رفع الصورة'
+    });
+  }
+};
+
+// وظائف استعادة كلمة المرور
+
+/**
+ * طلب إعادة تعيين كلمة المرور
+ * المسار: POST /api/mobile/auth/reset-password-request
+ */
+export const resetPasswordRequest = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'رقم الهاتف مطلوب'
+      });
+    }
+    
+    // التحقق من وجود المستخدم
+    const user = await User.findOne({ phoneNumber });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'لا يوجد حساب مرتبط بهذا الرقم، يرجى التسجيل أولاً'
+      });
+    }
+    
+    // توليد رمز OTP مكون من 6 أرقام
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    console.log(`📤 إرسال OTP لاستعادة كلمة المرور إلى ${phoneNumber}: ${otp}`);
+    
+    // حفظ OTP في قاعدة البيانات مع الإشارة إلى أنه للاستعادة
+    const newOtp = new Otp({
+      phoneNumber,
+      code: otp,
+      isForPasswordReset: true,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000) // ينتهي بعد 15 دقيقة
+    });
+    
+    await newOtp.save();
+    
+    // إرسال OTP عبر SMS أو WhatsApp (يمكن استخدام نفس الخدمة كما في إرسال OTP للتسجيل)
+    try {
+      // await smsService.sendOTP(phoneNumber, otp, 'استعادة كلمة المرور');
+      // للاختبار: تخطي إرسال الرسالة
+    } catch (error) {
+      console.error('خطأ في إرسال رمز التحقق:', error);
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'تم إرسال رمز التحقق بنجاح',
+      expiresAt: newOtp.expiresAt
+    });
+  } catch (error) {
+    console.error('خطأ في طلب استعادة كلمة المرور:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء معالجة طلب استعادة كلمة المرور'
+    });
+  }
+};
+
+/**
+ * التحقق من رمز إعادة تعيين كلمة المرور
+ * المسار: POST /api/mobile/auth/verify-reset-code
+ */
+export const verifyResetCode = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, otp } = req.body;
+    
+    if (!phoneNumber || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'رقم الهاتف ورمز التحقق مطلوبان'
+      });
+    }
+    
+    // التحقق من وجود المستخدم
+    const user = await User.findOne({ phoneNumber });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'لا يوجد حساب مرتبط بهذا الرقم'
+      });
+    }
+    
+    // البحث عن OTP
+    const otpRecord = await Otp.findOne({ 
+      phoneNumber,
+      code: otp,
+      isForPasswordReset: true
+    }).sort({ createdAt: -1 });
+    
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'رمز التحقق غير صحيح'
+      });
+    }
+    
+    // التحقق من صلاحية الرمز
+    const now = new Date();
+    const expiryDate = otpRecord.expiresAt || new Date(otpRecord.createdAt.getTime() + 15 * 60 * 1000);
+    
+    if (now > expiryDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'انتهت صلاحية رمز التحقق'
+      });
+    }
+    
+    // تحديث OTP إلى مستخدم
+    otpRecord.isUsed = true;
+    await otpRecord.save();
+    
+    // إنشاء رمز إعادة تعيين فريد
+    const resetToken = jwt.sign(
+      { userId: user._id, phoneNumber, isResetToken: true },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: '1h' }
+    );
+    
+    return res.status(200).json({
+      success: true,
+      message: 'تم التحقق من الرمز بنجاح',
+      data: {
+        resetToken
+      }
+    });
+  } catch (error) {
+    console.error('خطأ في التحقق من رمز إعادة التعيين:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء التحقق من رمز إعادة التعيين'
+    });
+  }
+};
+
+/**
+ * إعادة تعيين كلمة المرور
+ * المسار: POST /api/mobile/auth/reset-password
+ */
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, resetToken, newPassword, confirmPassword } = req.body;
+    
+    if (!phoneNumber || !resetToken || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'جميع الحقول مطلوبة: رقم الهاتف، رمز إعادة التعيين، كلمة المرور الجديدة، تأكيد كلمة المرور'
+      });
+    }
+    
+    // التحقق من تطابق كلمتي المرور
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'كلمة المرور وتأكيدها غير متطابقين'
+      });
+    }
+    
+    // التحقق من صحة رمز إعادة التعيين
+    let decodedToken;
+    try {
+      decodedToken = jwt.verify(resetToken, process.env.JWT_SECRET || 'your_jwt_secret') as any;
+      
+      // التحقق من أن الرمز هو لإعادة تعيين كلمة المرور ولنفس المستخدم
+      if (!decodedToken.isResetToken || decodedToken.phoneNumber !== phoneNumber) {
+        return res.status(400).json({
+          success: false,
+          message: 'رمز إعادة التعيين غير صالح'
+        });
+      }
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'رمز إعادة التعيين غير صالح أو منتهي الصلاحية'
+      });
+    }
+    
+    // البحث عن المستخدم
+    const user = await User.findOne({ 
+      _id: decodedToken.userId,
+      phoneNumber
+    });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'لم يتم العثور على المستخدم'
+      });
+    }
+    
+    // تحديث كلمة المرور
+    user.password = newPassword;
+    await user.save();
+    
+    // إنشاء توكن تسجيل دخول جديد
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET || 'your_jwt_secret',
+      { expiresIn: process.env.JWT_EXPIRE || '30d' }
+    );
+    
+    return res.status(200).json({
+      success: true,
+      message: 'تم إعادة تعيين كلمة المرور بنجاح',
+      token,
+      user: {
+        id: user._id,
+        phoneNumber: user.phoneNumber,
+        fullName: user.fullName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        isProfileComplete: user.isProfileComplete
+      }
+    });
+  } catch (error) {
+    console.error('خطأ في إعادة تعيين كلمة المرور:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء إعادة تعيين كلمة المرور'
     });
   }
 };

@@ -347,6 +347,7 @@ const AdvancedDocumentsList: React.FC = () => {
       return;
     }
     
+    setLoading(true);
     try {
       console.log(`حفظ التغييرات للإعلان ${selectedDocument.id}:`, editFormData);
       
@@ -393,7 +394,9 @@ const AdvancedDocumentsList: React.FC = () => {
       alert('تم حفظ التغييرات بنجاح');
     } catch (err: any) {
       console.error('Error saving changes:', err);
-      alert(err?.message || 'حدث خطأ أثناء حفظ التغييرات');
+      alert(err?.response?.data?.message || err?.message || 'حدث خطأ أثناء حفظ التغييرات');
+    } finally {
+      setLoading(false);
     }
   };
   

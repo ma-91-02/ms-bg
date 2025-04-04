@@ -6,6 +6,7 @@ export interface IOtp extends Document {
   createdAt: Date;
   expiresAt: Date;
   isUsed: boolean;
+  isForPasswordReset: boolean;
 }
 
 const otpSchema = new Schema({
@@ -29,6 +30,10 @@ const otpSchema = new Schema({
     default: () => new Date(Date.now() + 15 * 60 * 1000) // 15 minutes from now
   },
   isUsed: {
+    type: Boolean,
+    default: false
+  },
+  isForPasswordReset: {
     type: Boolean,
     default: false
   }

@@ -4,6 +4,7 @@ import morgan from 'morgan';
 import helmet from 'helmet';
 import mobileAuthRoutes from './routes/mobile/authRoutes';
 import adminAuthRoutes from './routes/admin/authRoutes';
+import adRoutes from './routes/mobile/adRoutes';
 
 // إنشاء تطبيق Express
 const app = express();
@@ -22,6 +23,7 @@ if (process.env.NODE_ENV === 'development') {
 // تسجيل مسارات API للجوال مع تتبع
 console.log('🔍 Registering mobile routes...');
 app.use('/api/mobile/auth', mobileAuthRoutes);
+app.use('/api/mobile/ads', adRoutes);
 console.log('✅ Mobile routes registered');
 
 // تسجيل مسارات API للمشرف

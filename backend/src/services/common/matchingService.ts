@@ -28,14 +28,78 @@ const calculateSimilarity = (str1: string, str2: string): number => {
   return Math.round(similarity);
 };
 
+// وظيفة لمطابقة رقم المستند بشكل مرن
+const compareItemNumbers = (num1: string, num2: string): boolean => {
+  if (!num1 || !num2) return false;
+  
+  // إزالة المسافات وتنظيف الأرقام
+  const cleanNum1 = num1.replace(/\s+/g, '').trim();
+  const cleanNum2 = num2.replace(/\s+/g, '').trim();
+  
+  // تحقق من التطابق التام
+  if (cleanNum1 === cleanNum2) return true;
+  
+  // تحقق من التطابق الجزئي (إذا كان أحد الأرقام جزءًا من الآخر)
+  if (cleanNum1.includes(cleanNum2) || cleanNum2.includes(cleanNum1)) return true;
+  
+  return false;
+};
+
+// وظيفة لمطابقة الأسماء
+const compareNames = (name1: string, name2: string): { isMatch: boolean, score: number } => {
+  if (!name1 || !name2) return { isMatch: false, score: 0 };
+  
+  // تنظيف الأسماء
+  const cleanName1 = name1.toLowerCase().replace(/\s+/g, ' ').trim();
+  const cleanName2 = name2.toLowerCase().replace(/\s+/g, ' ').trim();
+  
+  // تحقق من التطابق التام
+  if (cleanName1 === cleanName2) return { isMatch: true, score: 100 };
+  
+  // تحقق من الاحتواء
+  if (cleanName1.includes(cleanName2) || cleanName2.includes(cleanName1)) {
+    return { isMatch: true, score: 80 };
+  }
+  
+  // تقسيم الاسماء إلى كلمات
+  const words1 = cleanName1.split(' ');
+  const words2 = cleanName2.split(' ');
+  
+  // عدد الكلمات المشتركة
+  let matchingWords = 0;
+  for (const word1 of words1) {
+    if (word1.length < 3) continue; // تجاهل الكلمات القصيرة جدًا
+    
+    for (const word2 of words2) {
+      if (word2.length < 3) continue;
+      
+      if (word1 === word2) {
+        matchingWords++;
+        break;
+      }
+    }
+  }
+  
+  // إذا وجدت على الأقل كلمة مشتركة هامة
+  if (matchingWords > 0) {
+    const matchRatio = (matchingWords * 2) / (words1.length + words2.length);
+    const score = Math.round(matchRatio * 100);
+    return { isMatch: score > 30, score };
+  }
+  
+  return { isMatch: false, score: 0 };
+};
+
 // البحث عن تطابق محتمل بين إعلان جديد والإعلانات الموجودة
 export const findPotentialMatches = async (advertisementId: string): Promise<void> => {
   try {
+    console.log(`🔍 بدء البحث عن تطابقات للإعلان: ${advertisementId}`);
+    
     // الحصول على معلومات الإعلان الجديد
     const advertisement = await Advertisement.findById(advertisementId);
     
     if (!advertisement) {
-      console.error(`الإعلان غير موجود: ${advertisementId}`);
+      console.error(`❌ الإعلان غير موجود: ${advertisementId}`);
       return;
     }
     
@@ -50,81 +114,121 @@ export const findPotentialMatches = async (advertisementId: string): Promise<voi
       ? AdvertisementType.FOUND 
       : AdvertisementType.LOST;
     
-    // البحث عن إعلانات معتمدة من النوع المطلوب بنفس الفئة والمحافظة
+    console.log(`📋 البحث عن إعلانات من نوع ${searchType} متوافقة مع ${advertisement.type} (${advertisement.category})`);
+    
+    // 1. البحث عن إعلانات من نفس الفئة بغض النظر عن المحافظة
     const matchCandidates = await Advertisement.find({
       _id: { $ne: advertisementId },
       type: searchType,
       category: advertisement.category,
-      governorate: advertisement.governorate,
       isApproved: true,    // فقط الإعلانات المعتمدة
       isResolved: false    // فقط الإعلانات غير المحلولة
     });
     
-    console.log(`تم العثور على ${matchCandidates.length} مرشح محتمل للتطابق مع الإعلان ${advertisementId}`);
+    console.log(`✅ تم العثور على ${matchCandidates.length} مرشح محتمل للتطابق مع الإعلان ${advertisementId}`);
+    
+    // تخزين المطابقات الجديدة
+    const newMatches: Array<{
+      lostAdvertisementId: string;
+      foundAdvertisementId: string;
+      matchScore: number;
+      matchingFields: string[];
+      status: MatchStatus;
+      notificationSent: boolean;
+    }> = [];
     
     // لكل مرشح، قم بحساب درجة التطابق
     for (const candidate of matchCandidates) {
       // تحديد أي من الإعلانين هو مفقود وأيهما موجود
-      const lostAdvertisementId = searchType === AdvertisementType.FOUND ? advertisement._id : candidate._id;
-      const foundAdvertisementId = searchType === AdvertisementType.FOUND ? candidate._id : advertisement._id;
+      const lostAdvertisementId = searchType === AdvertisementType.FOUND ? advertisement._id.toString() : candidate._id.toString();
+      const foundAdvertisementId = searchType === AdvertisementType.FOUND ? candidate._id.toString() : advertisement._id.toString();
+      
+      // التحقق من عدم وجود مطابقة مسجلة بالفعل
+      const existingMatch = await AdvertisementMatch.findOne({
+        $or: [
+          { lostAdvertisementId, foundAdvertisementId },
+          { lostAdvertisementId: foundAdvertisementId, foundAdvertisementId: lostAdvertisementId }
+        ]
+      });
+      
+      if (existingMatch) {
+        console.log(`⚠️ تجاهل مطابقة موجودة بالفعل بين ${lostAdvertisementId} و ${foundAdvertisementId}`);
+        continue;
+      }
       
       // حساب درجات التشابه لمختلف الحقول
-      const matchingFields = [];
+      const matchingFields: string[] = [];
       let totalScore = 0;
       
-      // فحص تطابق رقم المستند (إذا كان موجوداً)
+      // 1. فحص تطابق المحافظة (نعطي وزن منخفض)
+      if (advertisement.governorate === candidate.governorate) {
+        matchingFields.push('governorate');
+        totalScore += 10; // وزن منخفض للمحافظة
+      }
+      
+      // 2. فحص تطابق رقم المستند (إذا كان موجوداً) - هذا مهم جداً
       if (advertisement.itemNumber && candidate.itemNumber) {
-        const itemNumberSimilarity = advertisement.itemNumber === candidate.itemNumber ? 100 : 0;
-        if (itemNumberSimilarity > 0) {
+        if (compareItemNumbers(advertisement.itemNumber, candidate.itemNumber)) {
           matchingFields.push('itemNumber');
           totalScore += 60; // رقم المستند مهم جداً - وزن أعلى
         }
       }
       
-      // فحص تطابق اسم المالك (إذا كان موجوداً)
+      // 3. فحص تطابق اسم المالك (إذا كان موجوداً) - مهم أيضاً
       if (advertisement.ownerName && candidate.ownerName) {
-        const nameSimilarity = calculateSimilarity(advertisement.ownerName, candidate.ownerName);
-        if (nameSimilarity > 70) {
-          matchingFields.push('ownerName');
-          totalScore += 30; // اسم المالك مهم - وزن متوسط
+        const nameComparisonResult = compareNames(advertisement.ownerName, candidate.ownerName);
+        if (nameComparisonResult.isMatch) {
+          if (nameComparisonResult.score >= 80) {
+            matchingFields.push('ownerName');
+            totalScore += 30; // تطابق عالي في الاسم - وزن كامل
+          } else {
+            matchingFields.push('ownerName_partial');
+            totalScore += Math.round(30 * (nameComparisonResult.score / 100)); // وزن جزئي حسب درجة التطابق
+          }
         }
       }
       
-      // فحص تطابق الوصف
-      const descriptionSimilarity = calculateSimilarity(advertisement.description, candidate.description);
-      if (descriptionSimilarity > 50) {
-        matchingFields.push('description');
-        totalScore += 10; // الوصف له أهمية أقل - وزن أقل
+      // 4. فحص تطابق الوصف
+      if (advertisement.description && candidate.description) {
+        const descriptionSimilarity = calculateSimilarity(advertisement.description, candidate.description);
+        if (descriptionSimilarity > 50) {
+          matchingFields.push('description');
+          totalScore += 10; // الوصف له أهمية أقل - وزن أقل
+        } else if (descriptionSimilarity > 30) {
+          matchingFields.push('description_partial');
+          totalScore += 5; // تطابق جزئي في الوصف
+        }
       }
       
-      // إذا كان هناك تطابق كافي، أضف إلى جدول المطابقات
-      if (totalScore > 20 || matchingFields.length > 0) {
-        // التحقق من عدم وجود مطابقة مسجلة بالفعل
-        const existingMatch = await AdvertisementMatch.findOne({
-          $or: [
-            { lostAdvertisementId: lostAdvertisementId, foundAdvertisementId: foundAdvertisementId },
-            { lostAdvertisementId: foundAdvertisementId, foundAdvertisementId: lostAdvertisementId }
-          ]
-        });
+      // قواعد خاصة: إذا كان هناك تطابق في رقم المستند أو الاسم، نعتبرها مطابقة مهمة
+      const hasStrongMatch = matchingFields.includes('itemNumber') || matchingFields.includes('ownerName');
+      
+      // إذا كان هناك تطابق كافي أو تطابق قوي، أضف إلى جدول المطابقات
+      if (totalScore >= 15 || hasStrongMatch) {
+        console.log(`⭐ مطابقة جديدة بين ${lostAdvertisementId} و ${foundAdvertisementId} (${totalScore}%)`);
+        console.log(`📝 حقول التطابق: ${matchingFields.join(', ')}`);
         
-        if (existingMatch) {
-          console.log(`⚠️ مطابقة موجودة بالفعل بين ${lostAdvertisementId} و ${foundAdvertisementId}`);
-        } else {
-          console.log(`✨ إنشاء مطابقة جديدة بين ${lostAdvertisementId} و ${foundAdvertisementId}`);
-          const newMatch = new AdvertisementMatch({
-            lostAdvertisementId,
-            foundAdvertisementId,
-            matchScore: totalScore,
-            matchingFields,
-            status: MatchStatus.PENDING
-          });
-          
-          await newMatch.save();
-        }
+        // إضافة إلى مصفوفة المطابقات الجديدة
+        newMatches.push({
+          lostAdvertisementId,
+          foundAdvertisementId,
+          matchScore: totalScore,
+          matchingFields,
+          status: MatchStatus.PENDING,
+          notificationSent: false
+        });
       }
     }
+    
+    // حفظ جميع المطابقات الجديدة دفعة واحدة
+    if (newMatches.length > 0) {
+      await AdvertisementMatch.insertMany(newMatches);
+      console.log(`✨ تم حفظ ${newMatches.length} مطابقة جديدة في قاعدة البيانات`);
+    } else {
+      console.log(`😞 لم يتم العثور على مطابقات جديدة للإعلان ${advertisementId}`);
+    }
   } catch (error) {
-    console.error('خطأ في البحث عن تطابقات محتملة:', error);
+    console.error('❌ خطأ في البحث عن تطابقات محتملة:', error);
   }
 };
 

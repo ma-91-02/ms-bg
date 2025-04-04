@@ -15,6 +15,9 @@ router.get('/pending', matchesController.getPendingMatches);
 router.put('/:id/approve', matchesController.approveMatch);
 router.put('/:id/reject', matchesController.rejectMatch);
 
+// إضافة مسار إنشاء المطابقات بشكل جماعي
+router.post('/bulk-create', matchesController.bulkCreateMatches);
+
 // إضافة مسارات الاختبار
 router.get('/run-matching', matchesController.runMatchingForAll);
 router.get('/run-matching/:advertisementId', matchesController.runMatchingForOne);

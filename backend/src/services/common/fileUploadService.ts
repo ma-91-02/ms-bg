@@ -53,7 +53,7 @@ export const createUploadMiddleware = (
 
 // محددات مسبقة الإعداد
 export const uploadAdvertisementImages = createUploadMiddleware('advertisements').array('images', 5);
-export const uploadProfileImage = createUploadMiddleware('profiles', ['image/jpeg', 'image/png', 'image/jpg'], 2 * 1024 * 1024).single('image');
+export const uploadProfileImage = createUploadMiddleware('profiles', ['image/jpeg', 'image/png', 'image/jpg'], 5 * 1024 * 1024).single('image');
 
 // تكوين multer لتحميل الصور
 const storage = multer.diskStorage({

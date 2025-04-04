@@ -29,6 +29,14 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route 
+            path="/admin/user/:id" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
           <Route path="/" element={<Navigate to="/admin/login" replace />} />
         </Routes>
       </div>

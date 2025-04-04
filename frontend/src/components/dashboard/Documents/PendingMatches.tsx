@@ -137,9 +137,10 @@ const PendingMatches: React.FC = () => {
       
       // إيقاف وضع التحرير
       setIsEditMode(false);
-    } catch (err) {
+      alert('تم حفظ التغييرات بنجاح');
+    } catch (err: any) {
       console.error('Error updating document:', err);
-      alert('حدث خطأ أثناء تحديث الإعلان');
+      alert(err?.response?.data?.message || err?.message || 'حدث خطأ أثناء تحديث الإعلان');
     }
   };
   

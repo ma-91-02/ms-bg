@@ -7,9 +7,16 @@ import SearchIcon from '@mui/icons-material/Search';
 import LiveHelpIcon from '@mui/icons-material/LiveHelp';
 import SummarizeIcon from '@mui/icons-material/Summarize';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import TimelineChart from './TimelineChart';
+import TopUsersList from './TopUsersList';
+import RecentActivity from './RecentActivity';
 import '../../../styles/Statistics.css';
 
-const Statistics: React.FC = () => {
+interface StatisticsProps {
+  setActiveSection?: (section: string) => void;
+}
+
+const Statistics: React.FC<StatisticsProps> = ({ setActiveSection }) => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +51,12 @@ const Statistics: React.FC = () => {
 
   // طباعة قيم البيانات الحالية للتصحيح
   console.log('قيم الإحصائيات الحالية في الرندر:', stats);
+
+  const handleCardClick = (section: string) => {
+    if (setActiveSection) {
+      setActiveSection(section);
+    }
+  };
 
   if (loading) {
     return (
@@ -95,7 +108,10 @@ const Statistics: React.FC = () => {
       <Grid container spacing={3}>
         {/* إجمالي المستخدمين */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card className="stats-card total-users">
+          <Card 
+            className="stats-card total-users clickable-card" 
+            onClick={() => handleCardClick('users')}
+          >
             <Box className="card-content">
               <PeopleIcon className="stats-icon" />
               <Box>
@@ -112,7 +128,10 @@ const Statistics: React.FC = () => {
 
         {/* إجمالي الإعلانات */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card className="stats-card total-documents">
+          <Card 
+            className="stats-card total-documents clickable-card" 
+            onClick={() => handleCardClick('advertisements')}
+          >
             <Box className="card-content">
               <SummarizeIcon className="stats-icon" />
               <Box>
@@ -129,7 +148,10 @@ const Statistics: React.FC = () => {
 
         {/* الإعلانات المعلقة */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card className="stats-card pending-documents">
+          <Card 
+            className="stats-card pending-documents clickable-card" 
+            onClick={() => handleCardClick('review')}
+          >
             <Box className="card-content">
               <SearchIcon className="stats-icon" />
               <Box>
@@ -146,7 +168,10 @@ const Statistics: React.FC = () => {
 
         {/* طلبات التواصل */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card className="stats-card contact-requests">
+          <Card 
+            className="stats-card contact-requests clickable-card"
+            onClick={() => handleCardClick('contacts')}
+          >
             <Box className="card-content">
               <LiveHelpIcon className="stats-icon" />
               <Box>
@@ -163,7 +188,10 @@ const Statistics: React.FC = () => {
 
         {/* الإعلانات الموافق عليها */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card className="stats-card approved-documents">
+          <Card 
+            className="stats-card approved-documents clickable-card"
+            onClick={() => handleCardClick('advertisements')}
+          >
             <Box className="card-content">
               <DoneIcon className="stats-icon" />
               <Box>
@@ -180,7 +208,10 @@ const Statistics: React.FC = () => {
 
         {/* الإعلانات المستردة */}
         <Grid item xs={12} sm={6} md={4}>
-          <Card className="stats-card resolved-documents">
+          <Card 
+            className="stats-card resolved-documents clickable-card"
+            onClick={() => handleCardClick('matches')}
+          >
             <Box className="card-content">
               <CheckCircleIcon className="stats-icon" />
               <Box>
@@ -195,6 +226,17 @@ const Statistics: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* إضافة تنسيق جديد للمخطط الزمني وقائمة المستخدمين النشطين */}
+      <div className="dashboard-grid-container">
+        <div className="dashboard-grid-left">
+          <TimelineChart title="تحليل النمو على مدار الوقت" />
+          <RecentActivity maxItems={10} />
+        </div>
+        <div className="dashboard-grid-right">
+          <TopUsersList maxUsers={5} />
+        </div>
+      </div>
     </Box>
   );
 };

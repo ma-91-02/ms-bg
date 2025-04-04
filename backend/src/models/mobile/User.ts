@@ -16,6 +16,7 @@ export interface IUser extends Document {
   otp?: string;
   otpExpires?: Date;
   isProfileComplete: boolean;
+  favorites: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
   comparePassword: (candidatePassword: string) => Promise<boolean>;
@@ -83,6 +84,10 @@ const userSchema = new Schema<IUser>({
   isProfileComplete: {
     type: Boolean,
     default: false
+  },
+  favorites: {
+    type: [mongoose.Types.ObjectId],
+    ref: 'Advertisement'
   }
 }, {
   timestamps: true
