@@ -4,15 +4,15 @@
  */
 export declare const validateEnv: () => Readonly<{
     PORT: number;
-    NODE_ENV: "test" | "development" | "production";
+    NODE_ENV: "development" | "test" | "production";
     MONGODB_URI: string;
     JWT_SECRET: string;
     JWT_EXPIRES_IN: string;
     ADMIN_USERNAME: string;
     ADMIN_PASSWORD: string;
-    TWILIO_ACCOUNT_SID: string | undefined;
-    TWILIO_AUTH_TOKEN: string | undefined;
-    TWILIO_PHONE_NUMBER: string | undefined;
+    TWILIO_ACCOUNT_SID: any;
+    TWILIO_AUTH_TOKEN: any;
+    TWILIO_PHONE_NUMBER: any;
     MAX_FILE_SIZE: number;
     MAX_IMAGES_PER_REPORT: number;
     ENABLE_OTP_VERIFICATION: boolean;

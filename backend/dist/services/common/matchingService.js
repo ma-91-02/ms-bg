@@ -116,6 +116,7 @@ const compareNames = (name1, name2) => {
 };
 // البحث عن تطابق محتمل بين إعلان جديد والإعلانات الموجودة
 const findPotentialMatches = async (advertisementId) => {
+    var _a, _b, _c, _d;
     try {
         console.log(`🔍 بدء البحث عن تطابقات للإعلان: ${advertisementId}`);
         // الحصول على معلومات الإعلان الجديد
@@ -148,8 +149,12 @@ const findPotentialMatches = async (advertisementId) => {
         // لكل مرشح، قم بحساب درجة التطابق
         for (const candidate of matchCandidates) {
             // تحديد أي من الإعلانين هو مفقود وأيهما موجود
-            const lostAdvertisementId = searchType === Advertisement_1.AdvertisementType.FOUND ? advertisement._id.toString() : candidate._id.toString();
-            const foundAdvertisementId = searchType === Advertisement_1.AdvertisementType.FOUND ? candidate._id.toString() : advertisement._id.toString();
+            const lostAdvertisementId = searchType === Advertisement_1.AdvertisementType.FOUND
+                ? ((_a = advertisement._id) === null || _a === void 0 ? void 0 : _a.toString()) || String(advertisement._id)
+                : ((_b = candidate._id) === null || _b === void 0 ? void 0 : _b.toString()) || String(candidate._id);
+            const foundAdvertisementId = searchType === Advertisement_1.AdvertisementType.FOUND
+                ? ((_c = candidate._id) === null || _c === void 0 ? void 0 : _c.toString()) || String(candidate._id)
+                : ((_d = advertisement._id) === null || _d === void 0 ? void 0 : _d.toString()) || String(advertisement._id);
             // التحقق من عدم وجود مطابقة مسجلة بالفعل
             const existingMatch = await AdvertisementMatch_1.default.findOne({
                 $or: [

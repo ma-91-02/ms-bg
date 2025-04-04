@@ -55,4 +55,5 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       message: 'حدث خطأ في المصادقة'
     });
   }
+  return;
 }; 

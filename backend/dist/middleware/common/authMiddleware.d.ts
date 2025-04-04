@@ -7,6 +7,6 @@ declare global {
         }
     }
 }
-export declare const protect: (req: Request, res: Response, next: NextFunction) => Promise<Response<any, Record<string, any>> | undefined>;
-export declare const adminProtect: (req: Request, res: Response, next: NextFunction) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const protect: (req: Request, res: Response, next: NextFunction) => Promise<Response<any, Record<string, any>>>;
+export declare const adminProtect: (req: Request, res: Response, next: NextFunction) => Promise<Response<any, Record<string, any>>>;
 //# sourceMappingURL=authMiddleware.d.ts.map

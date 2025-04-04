@@ -5,15 +5,14 @@ import { NotificationType } from '../../types/mobile/notifications';
  * نموذج الإشعار - نتجنب استخدام النموذج مباشرة لإزالة الاعتماديات
  */
 interface Notification {
-    userId: mongoose.Types.ObjectId | string;
-    title: string;
-    body: string;
+    userId: string;
+    id: string;
     type: string;
-    referenceId?: mongoose.Types.ObjectId | string;
-    data?: Record<string, any>;
-    isRead: boolean;
+    title: string;
+    message: string;
+    data?: any;
+    read: boolean;
     createdAt: Date;
-    updatedAt: Date;
 }
 /**
  * واجهة إنشاء إشعار جديد

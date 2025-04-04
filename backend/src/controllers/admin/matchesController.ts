@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import AdvertisementMatch, { MatchStatus } from '../../models/mobile/AdvertisementMatch';
 import Advertisement from '../../models/mobile/Advertisement';
-import { AuthRequest } from '../../types/express';
+import AdvertisementMatch, { MatchStatus } from '../../models/mobile/AdvertisementMatch';
+import { AuthRequest, AdvertisementType } from '../../types';
+import { IMatch } from '../../types/admin/admin';
 import User from '../../models/mobile/User';
 import { findPotentialMatches } from '../../services/common/matchingService';
 
@@ -43,10 +44,10 @@ export const getPendingMatches = async (req: AuthRequest, res: Response) => {
     console.log(`📊 العثور على ${advertisements.length} إعلان معتمد للمطابقة`);
     
     // إنشاء مصفوفة تخزن جميع عمليات المطابقة المحتملة
-    const potentialMatches = [];
+    const potentialMatches: IMatch[] = [];
     
     // إنشاء مجموعة للتحقق من وجود مطابقات مسبقة
-    const existingMatchesSet = new Set();
+    const existingMatchesSet = new Set<string>();
     
     // إضافة المطابقات الحالية إلى المجموعة لتجنب التكرار
     existingApprovedRejectedMatches.forEach(match => {
@@ -215,8 +216,8 @@ const cleanupDuplicateMatchesInternal = async () => {
   const allMatches = await AdvertisementMatch.find({});
   
   // تتبع المطابقات الفريدة
-  const uniqueMatchPairs = new Set();
-  const duplicateIds: any[] = [];
+  const uniqueMatchPairs = new Set<string>();
+  const duplicateIds: string[] = [];
   
   // تحديد المطابقات المكررة
   for (const match of allMatches) {
@@ -229,7 +230,7 @@ const cleanupDuplicateMatchesInternal = async () => {
     
     if (uniqueMatchPairs.has(matchPair)) {
       // حفظ معرف المطابقة المكررة
-      duplicateIds.push(match._id);
+      duplicateIds.push(match._id.toString());
     } else {
       // تسجيل هذه المطابقة كمطابقة فريدة
       uniqueMatchPairs.add(matchPair);
@@ -527,32 +528,25 @@ export const runMatchingForOne = async (req: AuthRequest, res: Response) => {
     console.log(`جاري البحث عن تطابقات للإعلان: ${advertisementId}`);
     
     // تشغيل المطابقة
-    await findPotentialMatches(advertisementId);
-    
-    // جلب نتائج المطابقة
-    const matches = await AdvertisementMatch.find({
-      $or: [
-        { lostAdvertisementId: advertisementId },
-        { foundAdvertisementId: advertisementId }
-      ]
-    })
-    .populate({
-      path: 'lostAdvertisementId',
-      select: 'category governorate ownerName itemNumber description'
-    })
-    .populate({
-      path: 'foundAdvertisementId',
-      select: 'category governorate ownerName itemNumber description'
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: `تم العثور على ${matches.length} مطابقة محتملة للإعلان`,
-      count: matches.length,
-      data: matches
-    });
+    await findPotentialMatches(advertisementId)
+      .then(matches => {
+        return res.status(200).json({
+          success: true,
+          message: `تم العثور على ${matches.length} مطابقة محتملة للإعلان`,
+          count: matches.length,
+          data: matches
+        });
+      })
+      .catch(err => {
+        console.error('خطأ في تشغيل المطابقة:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'حدث خطأ في الخادم',
+          error: err.message
+        });
+      });
   } catch (error: any) {
-    console.error('خطأ في تشغيل المطابقة:', error);
+    console.error('خطأ في تشغيل المطابقة لإعلان واحد:', error);
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ في الخادم',
@@ -575,7 +569,7 @@ export const cleanupDuplicateMatches = async (req: AuthRequest, res: Response) =
     const allMatches = await AdvertisementMatch.find({});
     
     // تتبع المطابقات الفريدة
-    const uniqueMatchPairs = new Set();
+    const uniqueMatchPairs = new Set<string>();
     const duplicateIds = [];
     
     // تحديد المطابقات المكررة
@@ -584,7 +578,7 @@ export const cleanupDuplicateMatches = async (req: AuthRequest, res: Response) =
       
       if (uniqueMatchPairs.has(matchPair)) {
         // مطابقة مكررة
-        duplicateIds.push(match._id);
+        duplicateIds.push(match._id.toString());
       } else {
         // مطابقة فريدة
         uniqueMatchPairs.add(matchPair);
@@ -697,10 +691,11 @@ export const bulkCreateMatches = async (req: AuthRequest, res: Response) => {
     
     console.log(`🔍 إضافة ${matches.length} مطابقة محتملة جديدة...`);
     
-    // حذف المطابقات المكررة
-    const uniqueMatchPairs = new Set();
-    const uniqueMatches = [];
+    // التحقق من المطابقات المكررة
+    const uniqueMatches: IMatch[] = [];
+    const uniqueKeys = new Set<string>();
     
+    // معالجة كل مطابقة وإضافتها إلى المصفوفة النهائية
     for (const match of matches) {
       const { lostAdvertisementId, foundAdvertisementId, matchScore, matchingFields } = match;
       
@@ -714,13 +709,12 @@ export const bulkCreateMatches = async (req: AuthRequest, res: Response) => {
       const pairKey = `${lostAdvertisementId}:${foundAdvertisementId}`;
       const reversePairKey = `${foundAdvertisementId}:${lostAdvertisementId}`;
       
-      if (uniqueMatchPairs.has(pairKey) || uniqueMatchPairs.has(reversePairKey)) {
+      if (uniqueKeys.has(pairKey) || uniqueKeys.has(reversePairKey)) {
         console.log(`تم تخطي مطابقة مكررة: ${pairKey}`);
         continue;
       }
       
-      // إضافة المطابقة الفريدة
-      uniqueMatchPairs.add(pairKey);
+      // إضافة المطابقة الفريدة إلى المصفوفة
       uniqueMatches.push({
         lostAdvertisementId,
         foundAdvertisementId,

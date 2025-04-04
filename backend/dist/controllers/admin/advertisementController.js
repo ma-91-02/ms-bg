@@ -336,7 +336,7 @@ const markAsResolved = async (req, res) => {
         }
         advertisement.isResolved = isResolved;
         advertisement.status = isResolved ? Advertisement_1.AdvertisementStatus.RESOLVED : Advertisement_1.AdvertisementStatus.APPROVED;
-        advertisement.resolvedAt = isResolved ? new Date() : null;
+        advertisement.resolvedAt = isResolved ? new Date() : undefined;
         await advertisement.save();
         return res.status(200).json({
             success: true,

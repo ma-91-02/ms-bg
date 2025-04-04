@@ -24,30 +24,18 @@ try {
     mobileAuthRouter = require('./mobile/authRoutes').default;
     console.log('✅ Mobile auth routes imported successfully: authRoutes');
 }
-catch (error) {
-    try {
-        mobileAuthRouter = require('./mobile/auth').default;
-        console.log('✅ Mobile auth routes imported successfully: auth');
-    }
-    catch (innerError) {
-        console.error('❌ Failed to import mobile auth routes:', innerError.message);
-        mobileAuthRouter = express_1.default.Router();
-    }
+catch (innerError) {
+    console.error('❌ Failed to import mobile auth routes:', innerError.message);
+    mobileAuthRouter = express_1.default.Router();
 }
 let mobileAdvertisementRouter;
 try {
     mobileAdvertisementRouter = require('./mobile/advertisementRoutes').default;
     console.log('✅ Advertisement routes imported successfully: advertisementRoutes');
 }
-catch (error) {
-    try {
-        mobileAdvertisementRouter = require('./mobile/advertisement').default;
-        console.log('✅ Advertisement routes imported successfully: advertisement');
-    }
-    catch (innerError) {
-        console.error('❌ Failed to import advertisement routes:', innerError.message);
-        mobileAdvertisementRouter = express_1.default.Router();
-    }
+catch (innerError) {
+    console.error('❌ Failed to import advertisement routes:', innerError.message);
+    mobileAdvertisementRouter = express_1.default.Router();
 }
 // تسجيل المسارات
 console.log('🚀 تسجيل المسارات في router/index.ts...');

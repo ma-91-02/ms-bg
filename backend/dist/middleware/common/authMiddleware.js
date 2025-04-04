@@ -47,9 +47,10 @@ const protect = async (req, res, next) => {
         console.error('Authentication error:', error);
         return res.status(401).json({
             success: false,
-            message: 'Not authorized, token failed'
+            message: 'غير مصرح به'
         });
     }
+    return;
 };
 exports.protect = protect;
 // Admin authentication middleware
@@ -91,9 +92,10 @@ const adminProtect = async (req, res, next) => {
         console.error('Admin authentication error:', error);
         return res.status(401).json({
             success: false,
-            message: 'Not authorized, token failed'
+            message: 'غير مصرح به'
         });
     }
+    return;
 };
 exports.adminProtect = adminProtect;
 //# sourceMappingURL=authMiddleware.js.map

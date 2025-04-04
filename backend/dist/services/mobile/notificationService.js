@@ -22,7 +22,7 @@ const createNotification = async (params) => {
             type,
             referenceId,
             data,
-            isRead: false
+            read: false
         });
         console.log(`🔔 تم إنشاء إشعار جديد: ${title} للمستخدم: ${userId}`);
         return notification;
@@ -46,7 +46,7 @@ const getUserNotifications = async (userId, options = { limit: 50, page: 1 }) =>
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         const total = userNotifications.length;
         const paginatedNotifications = userNotifications.slice(skip, skip + limit);
-        const unreadCount = userNotifications.filter(n => !n.isRead).length;
+        const unreadCount = userNotifications.filter(n => !n.read).length;
         return {
             notifications: paginatedNotifications,
             pagination: {
@@ -69,13 +69,13 @@ exports.getUserNotifications = getUserNotifications;
  */
 const markNotificationAsRead = async (notificationId, userId) => {
     try {
-        const index = notifications.findIndex(n => { var _a; return n.userId.toString() === userId && notificationId === ((_a = n._id) === null || _a === void 0 ? void 0 : _a.toString()); });
-        if (index === -1) {
+        const existingNotification = notifications.find(n => n.userId.toString() === userId && notificationId === n.id);
+        if (!existingNotification) {
             throw new Error('الإشعار غير موجود أو ليست لديك صلاحية الوصول إليه');
         }
-        notifications[index].isRead = true;
-        notifications[index].updatedAt = new Date();
-        return notifications[index];
+        existingNotification.read = true;
+        existingNotification.createdAt = new Date();
+        return existingNotification;
     }
     catch (error) {
         console.error('خطأ في وضع علامة مقروء على الإشعار:', error);
@@ -91,8 +91,8 @@ const markAllNotificationsAsRead = async (userId) => {
         notifications
             .filter(n => n.userId.toString() === userId)
             .forEach(n => {
-            n.isRead = true;
-            n.updatedAt = new Date();
+            n.read = true;
+            n.createdAt = new Date();
         });
         return { success: true };
     }

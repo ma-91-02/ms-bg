@@ -6,15 +6,14 @@ import { NotificationType } from '../../types/mobile/notifications';
  * نموذج الإشعار - نتجنب استخدام النموذج مباشرة لإزالة الاعتماديات
  */
 interface Notification {
-  userId: mongoose.Types.ObjectId | string;
-  title: string;
-  body: string;
+  userId: string;
+  id: string;
   type: string;
-  referenceId?: mongoose.Types.ObjectId | string;
-  data?: Record<string, any>;
-  isRead: boolean;
+  title: string;
+  message: string;
+  data?: any;
+  read: boolean;
   createdAt: Date;
-  updatedAt: Date;
 }
 
 /**
@@ -47,7 +46,7 @@ export const createNotification = async (params: ICreateNotification): Promise<a
       type,
       referenceId,
       data,
-      isRead: false
+      read: false
     });
     
     console.log(`🔔 تم إنشاء إشعار جديد: ${title} للمستخدم: ${userId}`);
@@ -74,7 +73,7 @@ export const getUserNotifications = async (userId: string, options = { limit: 50
     
     const total = userNotifications.length;
     const paginatedNotifications = userNotifications.slice(skip, skip + limit);
-    const unreadCount = userNotifications.filter(n => !n.isRead).length;
+    const unreadCount = userNotifications.filter(n => !n.read).length;
     
     return {
       notifications: paginatedNotifications,
@@ -97,18 +96,18 @@ export const getUserNotifications = async (userId: string, options = { limit: 50
  */
 export const markNotificationAsRead = async (notificationId: string, userId: string) => {
   try {
-    const index = notifications.findIndex(
-      n => n.userId.toString() === userId && notificationId === n._id?.toString()
+    const existingNotification = notifications.find(
+      n => n.userId.toString() === userId && notificationId === n.id
     );
     
-    if (index === -1) {
+    if (!existingNotification) {
       throw new Error('الإشعار غير موجود أو ليست لديك صلاحية الوصول إليه');
     }
     
-    notifications[index].isRead = true;
-    notifications[index].updatedAt = new Date();
+    existingNotification.read = true;
+    existingNotification.createdAt = new Date();
     
-    return notifications[index];
+    return existingNotification;
   } catch (error) {
     console.error('خطأ في وضع علامة مقروء على الإشعار:', error);
     throw error;
@@ -123,8 +122,8 @@ export const markAllNotificationsAsRead = async (userId: string) => {
     notifications
       .filter(n => n.userId.toString() === userId)
       .forEach(n => {
-        n.isRead = true;
-        n.updatedAt = new Date();
+        n.read = true;
+        n.createdAt = new Date();
       });
     
     return { success: true };

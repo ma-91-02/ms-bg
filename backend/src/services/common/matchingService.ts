@@ -140,8 +140,13 @@ export const findPotentialMatches = async (advertisementId: string): Promise<voi
     // لكل مرشح، قم بحساب درجة التطابق
     for (const candidate of matchCandidates) {
       // تحديد أي من الإعلانين هو مفقود وأيهما موجود
-      const lostAdvertisementId = searchType === AdvertisementType.FOUND ? advertisement._id.toString() : candidate._id.toString();
-      const foundAdvertisementId = searchType === AdvertisementType.FOUND ? candidate._id.toString() : advertisement._id.toString();
+      const lostAdvertisementId = searchType === AdvertisementType.FOUND 
+        ? advertisement._id?.toString() || String(advertisement._id)
+        : candidate._id?.toString() || String(candidate._id);
+      
+      const foundAdvertisementId = searchType === AdvertisementType.FOUND 
+        ? candidate._id?.toString() || String(candidate._id)
+        : advertisement._id?.toString() || String(advertisement._id);
       
       // التحقق من عدم وجود مطابقة مسجلة بالفعل
       const existingMatch = await AdvertisementMatch.findOne({

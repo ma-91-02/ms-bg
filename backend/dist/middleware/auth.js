@@ -50,6 +50,7 @@ const protect = async (req, res, next) => {
             message: 'حدث خطأ في المصادقة'
         });
     }
+    return;
 };
 exports.protect = protect;
 //# sourceMappingURL=auth.js.map

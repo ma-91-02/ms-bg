@@ -343,7 +343,7 @@ export const markAsResolved = async (req: AuthRequest, res: Response) => {
 
     advertisement.isResolved = isResolved;
     advertisement.status = isResolved ? AdvertisementStatus.RESOLVED : AdvertisementStatus.APPROVED;
-    advertisement.resolvedAt = isResolved ? new Date() : null;
+    advertisement.resolvedAt = isResolved ? new Date() : undefined;
     
     await advertisement.save();
 

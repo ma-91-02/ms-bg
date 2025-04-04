@@ -37,8 +37,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bulkCreateMatches = exports.getMatchHistory = exports.cleanupDuplicateMatches = exports.runMatchingForOne = exports.runMatchingForAll = exports.rejectMatch = exports.approveMatch = exports.getAllMatches = exports.getPendingMatches = void 0;
-const AdvertisementMatch_1 = __importStar(require("../../models/mobile/AdvertisementMatch"));
 const Advertisement_1 = __importDefault(require("../../models/mobile/Advertisement"));
+const AdvertisementMatch_1 = __importStar(require("../../models/mobile/AdvertisementMatch"));
 const matchingService_1 = require("../../services/common/matchingService");
 // الحصول على قائمة المطابقات المعلقة
 const getPendingMatches = async (req, res) => {
@@ -230,7 +230,7 @@ const cleanupDuplicateMatchesInternal = async () => {
         const matchPair = [lostId, foundId].sort().join('--');
         if (uniqueMatchPairs.has(matchPair)) {
             // حفظ معرف المطابقة المكررة
-            duplicateIds.push(match._id);
+            duplicateIds.push(match._id.toString());
         }
         else {
             // تسجيل هذه المطابقة كمطابقة فريدة
@@ -492,31 +492,26 @@ const runMatchingForOne = async (req, res) => {
         const { advertisementId } = req.params;
         console.log(`جاري البحث عن تطابقات للإعلان: ${advertisementId}`);
         // تشغيل المطابقة
-        await (0, matchingService_1.findPotentialMatches)(advertisementId);
-        // جلب نتائج المطابقة
-        const matches = await AdvertisementMatch_1.default.find({
-            $or: [
-                { lostAdvertisementId: advertisementId },
-                { foundAdvertisementId: advertisementId }
-            ]
+        await (0, matchingService_1.findPotentialMatches)(advertisementId)
+            .then(matches => {
+            return res.status(200).json({
+                success: true,
+                message: `تم العثور على ${matches.length} مطابقة محتملة للإعلان`,
+                count: matches.length,
+                data: matches
+            });
         })
-            .populate({
-            path: 'lostAdvertisementId',
-            select: 'category governorate ownerName itemNumber description'
-        })
-            .populate({
-            path: 'foundAdvertisementId',
-            select: 'category governorate ownerName itemNumber description'
-        });
-        return res.status(200).json({
-            success: true,
-            message: `تم العثور على ${matches.length} مطابقة محتملة للإعلان`,
-            count: matches.length,
-            data: matches
+            .catch(err => {
+            console.error('خطأ في تشغيل المطابقة:', err);
+            return res.status(500).json({
+                success: false,
+                message: 'حدث خطأ في الخادم',
+                error: err.message
+            });
         });
     }
     catch (error) {
-        console.error('خطأ في تشغيل المطابقة:', error);
+        console.error('خطأ في تشغيل المطابقة لإعلان واحد:', error);
         return res.status(500).json({
             success: false,
             message: 'حدث خطأ في الخادم',
@@ -544,7 +539,7 @@ const cleanupDuplicateMatches = async (req, res) => {
             const matchPair = `${match.lostAdvertisementId}-${match.foundAdvertisementId}`;
             if (uniqueMatchPairs.has(matchPair)) {
                 // مطابقة مكررة
-                duplicateIds.push(match._id);
+                duplicateIds.push(match._id.toString());
             }
             else {
                 // مطابقة فريدة
@@ -648,9 +643,10 @@ const bulkCreateMatches = async (req, res) => {
             });
         }
         console.log(`🔍 إضافة ${matches.length} مطابقة محتملة جديدة...`);
-        // حذف المطابقات المكررة
-        const uniqueMatchPairs = new Set();
+        // التحقق من المطابقات المكررة
         const uniqueMatches = [];
+        const uniqueKeys = new Set();
+        // معالجة كل مطابقة وإضافتها إلى المصفوفة النهائية
         for (const match of matches) {
             const { lostAdvertisementId, foundAdvertisementId, matchScore, matchingFields } = match;
             // التحقق من توفر المعرفات الضرورية
@@ -661,12 +657,11 @@ const bulkCreateMatches = async (req, res) => {
             // إنشاء مفتاح فريد للتحقق من التكرار
             const pairKey = `${lostAdvertisementId}:${foundAdvertisementId}`;
             const reversePairKey = `${foundAdvertisementId}:${lostAdvertisementId}`;
-            if (uniqueMatchPairs.has(pairKey) || uniqueMatchPairs.has(reversePairKey)) {
+            if (uniqueKeys.has(pairKey) || uniqueKeys.has(reversePairKey)) {
                 console.log(`تم تخطي مطابقة مكررة: ${pairKey}`);
                 continue;
             }
-            // إضافة المطابقة الفريدة
-            uniqueMatchPairs.add(pairKey);
+            // إضافة المطابقة الفريدة إلى المصفوفة
             uniqueMatches.push({
                 lostAdvertisementId,
                 foundAdvertisementId,

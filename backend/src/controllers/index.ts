@@ -1,4 +1,16 @@
-// تصدير وحدات التحكم
-export * from './mobile/authController';
+// استيراد وحدات متحكمات الإعلانات
 export * from './mobile/advertisementController';
-export * from './admin/authController'; 
+
+// استيراد وحدات متحكمات المصادقة المحمولة
+import * as mobileAuth from './mobile/authController';
+export { mobileAuth };
+
+// استيراد وحدات متحكمات المصادقة الإدارية
+import * as adminAuth from './admin/authController';
+export { adminAuth };
+
+// استيراد وحدات متحكمات طلبات التواصل
+export * from './mobile/contactRequestController';
+
+// استيراد وحدات متحكمات الإشعارات
+export * from './mobile/notificationController'; 

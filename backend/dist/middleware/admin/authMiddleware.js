@@ -41,9 +41,10 @@ const authenticateAdmin = (req, res, next) => {
         console.error('خطأ في التحقق من التوكن:', error);
         return res.status(401).json({
             success: false,
-            message: 'غير مصرح به'
+            message: 'فشل في المصادقة'
         });
     }
+    return;
 };
 exports.authenticateAdmin = authenticateAdmin;
 /**
@@ -81,12 +82,10 @@ const protectAdmin = async (req, res, next) => {
             });
         }
         // إضافة المشرف إلى الطلب
-        req.user = {
-            _id: admin._id.toString(),
-            id: admin._id.toString(),
-            fullName: admin.fullName,
+        req.admin = {
+            _id: String(admin._id),
+            id: String(admin._id),
             username: admin.username,
-            email: admin.email,
             role: admin.role
         };
         next();
@@ -105,11 +104,12 @@ const protectAdmin = async (req, res, next) => {
             });
         }
         console.error('خطأ في وسيط المصادقة للأدمن:', error);
-        return res.status(500).json({
+        return res.status(401).json({
             success: false,
-            message: 'حدث خطأ في المصادقة'
+            message: 'غير مصرح به'
         });
     }
+    return;
 };
 exports.default = {
     authenticateAdmin: exports.authenticateAdmin,

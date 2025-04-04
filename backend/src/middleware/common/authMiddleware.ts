@@ -64,9 +64,10 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     console.error('Authentication error:', error);
     return res.status(401).json({
       success: false,
-      message: 'Not authorized, token failed'
+      message: 'غير مصرح به'
     });
   }
+  return;
 };
 
 // Admin authentication middleware
@@ -114,7 +115,8 @@ export const adminProtect = async (req: Request, res: Response, next: NextFuncti
     console.error('Admin authentication error:', error);
     return res.status(401).json({
       success: false,
-      message: 'Not authorized, token failed'
+      message: 'غير مصرح به'
     });
   }
+  return;
 }; 

@@ -36,8 +36,10 @@ const sendOTP = async (req, res) => {
                 });
             }
         }
-        // توليد رمز OTP مكون من 6 أرقام
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // استخدام رمز ثابت (000000) في وضع الديمو
+        // أو توليد رمز عشوائي في وضع الإنتاج
+        const isDemoMode = true; // قم بتغييره إلى false عند التشغيل في وضع الإنتاج
+        const otp = isDemoMode ? '000000' : Math.floor(100000 + Math.random() * 900000).toString();
         console.log(`📤 إرسال OTP إلى ${phoneNumber}: ${otp}`);
         // حفظ OTP في قاعدة البيانات
         const newOtp = new Otp_1.default({
@@ -46,19 +48,21 @@ const sendOTP = async (req, res) => {
             expiresAt: new Date(Date.now() + 15 * 60 * 1000) // ينتهي بعد 15 دقيقة
         });
         await newOtp.save();
-        // إرسال OTP عبر واتساب أو SMS
-        try {
-            // استدعاء خدمة الرسائل (محاكاة فقط في هذا المثال)
-            // await smsService.sendOTP(phoneNumber, otp);
-        }
-        catch (error) {
-            console.error('Error sending SMS:', error);
+        // في وضع الديمو، لا نرسل OTP فعليًا
+        if (!isDemoMode) {
+            try {
+                // استدعاء خدمة الرسائل
+                // await smsService.sendOTP(phoneNumber, otp);
+            }
+            catch (error) {
+                console.error('Error sending SMS:', error);
+            }
         }
         return res.status(200).json({
             success: true,
-            message: 'تم إرسال رمز التحقق بنجاح'
-            // في بيئة التطوير، قد ترغب في إرجاع الرمز للاختبار
-            // ...(process.env.NODE_ENV === 'development' ? { testOtp: otp } : {})
+            message: 'تم إرسال رمز التحقق بنجاح',
+            // إرجاع الرمز دائمًا في وضع الديمو
+            ...(isDemoMode ? { demoOtp: otp } : {})
         });
     }
     catch (error) {
@@ -81,6 +85,36 @@ const verifyOtp = async (req, res) => {
                 message: "يجب توفير رقم الهاتف ورمز التحقق"
             });
         }
+        // وضع الديمو: السماح بأي رقم هاتف مع الرمز 000000
+        const isDemoMode = true; // قم بتغييره إلى false عند التشغيل في وضع الإنتاج
+        if (isDemoMode && otp === '000000') {
+            console.log(`✅ تم التحقق من OTP في وضع الديمو لرقم ${phoneNumber}`);
+            // البحث عن المستخدم أو إنشاؤه
+            let user = await User_1.default.findOne({ phoneNumber });
+            if (!user) {
+                // إنشاء مستخدم جديد مع الحد الأدنى من المعلومات
+                user = new User_1.default({
+                    phoneNumber,
+                    // لا نضيف أي حقول أخرى هنا - سيكملها المستخدم لاحقًا
+                });
+                await user.save();
+            }
+            // إنشاء وإرجاع توكن JWT
+            const token = jsonwebtoken_1.default.sign({ userId: user._id, phoneNumber }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: process.env.JWT_EXPIRES_IN || '30d' });
+            return res.status(200).json({
+                success: true,
+                message: "تم التحقق بنجاح (وضع الديمو)",
+                token,
+                user: {
+                    id: user._id,
+                    phoneNumber: user.phoneNumber,
+                    fullName: user.fullName || '',
+                    isProfileComplete: !!(user.fullName && user.email),
+                    isDemoUser: true
+                }
+            });
+        }
+        // معالجة عادية للتحقق من OTP في الوضع العادي
         // البحث عن آخر رمز OTP مرسل لهذا الرقم
         const otpRecord = await Otp_1.default.findOne({ phoneNumber }).sort({ createdAt: -1 });
         if (!otpRecord) {
@@ -129,7 +163,7 @@ const verifyOtp = async (req, res) => {
                 id: user._id,
                 phoneNumber: user.phoneNumber,
                 fullName: user.fullName || '',
-                isProfileComplete: !!(user.fullName && user.email), // إضافة حقل للإشارة إلى اكتمال الملف الشخصي
+                isProfileComplete: !!(user.fullName && user.email),
             }
         });
     }
@@ -554,8 +588,9 @@ const resetPasswordRequest = async (req, res) => {
                 message: 'لا يوجد حساب مرتبط بهذا الرقم، يرجى التسجيل أولاً'
             });
         }
-        // توليد رمز OTP مكون من 6 أرقام
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // استخدام رمز ثابت في وضع الديمو
+        const isDemoMode = true; // قم بتغييره إلى false عند التشغيل في وضع الإنتاج
+        const otp = isDemoMode ? '000000' : Math.floor(100000 + Math.random() * 900000).toString();
         console.log(`📤 إرسال OTP لاستعادة كلمة المرور إلى ${phoneNumber}: ${otp}`);
         // حفظ OTP في قاعدة البيانات مع الإشارة إلى أنه للاستعادة
         const newOtp = new Otp_1.default({
@@ -565,18 +600,20 @@ const resetPasswordRequest = async (req, res) => {
             expiresAt: new Date(Date.now() + 15 * 60 * 1000) // ينتهي بعد 15 دقيقة
         });
         await newOtp.save();
-        // إرسال OTP عبر SMS أو WhatsApp (يمكن استخدام نفس الخدمة كما في إرسال OTP للتسجيل)
-        try {
-            // await smsService.sendOTP(phoneNumber, otp, 'استعادة كلمة المرور');
-            // للاختبار: تخطي إرسال الرسالة
-        }
-        catch (error) {
-            console.error('خطأ في إرسال رمز التحقق:', error);
+        // في وضع الديمو، لا نرسل OTP فعليًا
+        if (!isDemoMode) {
+            try {
+                // await smsService.sendOTP(phoneNumber, otp, 'استعادة كلمة المرور');
+            }
+            catch (error) {
+                console.error('خطأ في إرسال رمز التحقق:', error);
+            }
         }
         return res.status(200).json({
             success: true,
             message: 'تم إرسال رمز التحقق بنجاح',
-            expiresAt: newOtp.expiresAt
+            expiresAt: newOtp.expiresAt,
+            ...(isDemoMode ? { demoOtp: otp } : {})
         });
     }
     catch (error) {
@@ -609,7 +646,21 @@ const verifyResetCode = async (req, res) => {
                 message: 'لا يوجد حساب مرتبط بهذا الرقم'
             });
         }
-        // البحث عن OTP
+        // وضع الديمو: السماح بأي رقم هاتف مع الرمز 000000
+        const isDemoMode = true; // قم بتغييره إلى false عند التشغيل في وضع الإنتاج
+        if (isDemoMode && otp === '000000') {
+            console.log(`✅ تم التحقق من رمز إعادة تعيين كلمة المرور في وضع الديمو لرقم ${phoneNumber}`);
+            // إنشاء رمز إعادة تعيين فريد
+            const resetToken = jsonwebtoken_1.default.sign({ userId: user._id, phoneNumber, isResetToken: true, isDemoMode: true }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: '1h' });
+            return res.status(200).json({
+                success: true,
+                message: 'تم التحقق من الرمز بنجاح (وضع الديمو)',
+                data: {
+                    resetToken
+                }
+            });
+        }
+        // البحث عن OTP في حالة الوضع العادي
         const otpRecord = await Otp_1.default.findOne({
             phoneNumber,
             code: otp,
@@ -672,17 +723,49 @@ const resetPassword = async (req, res) => {
                 message: 'كلمة المرور وتأكيدها غير متطابقين'
             });
         }
-        // التحقق من صحة رمز إعادة التعيين
-        let decodedToken;
-        try {
-            decodedToken = jsonwebtoken_1.default.verify(resetToken, process.env.JWT_SECRET || 'your_jwt_secret');
-            // التحقق من أن الرمز هو لإعادة تعيين كلمة المرور ولنفس المستخدم
-            if (!decodedToken.isResetToken || decodedToken.phoneNumber !== phoneNumber) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'رمز إعادة التعيين غير صالح'
-                });
+        // تحقق من وضع الديمو
+        // في وضع الديمو نتخطى التحقق من التوكن ونسمح بتغيير كلمة المرور
+        const isDemoMode = true; // قم بتغييره إلى false عند التشغيل في وضع الإنتاج
+        let userId;
+        if (isDemoMode) {
+            try {
+                // محاولة فك تشفير التوكن للتحقق مما إذا كان في وضع الديمو
+                const decoded = jsonwebtoken_1.default.verify(resetToken, process.env.JWT_SECRET || 'your_jwt_secret');
+                if (decoded.isDemoMode) {
+                    console.log('✅ تم التعرف على توكن وضع الديمو');
+                    userId = decoded.userId;
+                }
             }
+            catch (error) {
+                // في حالة خطأ في التوكن، نستمر في المعالجة العادية
+                console.log('توكن غير صالح أو ليس في وضع الديمو');
+            }
+            // في وضع الديمو إذا لم نتمكن من فك التوكن، نبحث عن المستخدم عن طريق رقم الهاتف
+            if (!userId) {
+                const user = await User_1.default.findOne({ phoneNumber });
+                if (user) {
+                    userId = user._id;
+                }
+            }
+            if (userId) {
+                console.log(`✅ تغيير كلمة المرور في وضع الديمو للمستخدم ${userId}`);
+                // تحديث كلمة المرور
+                const user = await User_1.default.findById(userId);
+                if (user) {
+                    user.password = newPassword;
+                    await user.save();
+                    return res.status(200).json({
+                        success: true,
+                        message: 'تمت إعادة تعيين كلمة المرور بنجاح (وضع الديمو)'
+                    });
+                }
+            }
+        }
+        // التعامل العادي مع إعادة تعيين كلمة المرور
+        // التحقق من صلاحية التوكن
+        let decoded;
+        try {
+            decoded = jsonwebtoken_1.default.verify(resetToken, process.env.JWT_SECRET || 'your_jwt_secret');
         }
         catch (error) {
             return res.status(400).json({
@@ -690,11 +773,22 @@ const resetPassword = async (req, res) => {
                 message: 'رمز إعادة التعيين غير صالح أو منتهي الصلاحية'
             });
         }
+        // التحقق من أن التوكن لإعادة تعيين كلمة المرور
+        if (!decoded || !decoded.isResetToken || !decoded.userId) {
+            return res.status(400).json({
+                success: false,
+                message: 'رمز إعادة التعيين غير صالح'
+            });
+        }
+        // التحقق من أن رقم الهاتف يتطابق مع الموجود في التوكن
+        if (decoded.phoneNumber !== phoneNumber) {
+            return res.status(400).json({
+                success: false,
+                message: 'رقم الهاتف غير مطابق للرمز المقدم'
+            });
+        }
         // البحث عن المستخدم
-        const user = await User_1.default.findOne({
-            _id: decodedToken.userId,
-            phoneNumber
-        });
+        const user = await User_1.default.findById(decoded.userId);
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -704,20 +798,9 @@ const resetPassword = async (req, res) => {
         // تحديث كلمة المرور
         user.password = newPassword;
         await user.save();
-        // إنشاء توكن تسجيل دخول جديد
-        const token = jsonwebtoken_1.default.sign({ id: user._id }, process.env.JWT_SECRET || 'your_jwt_secret', { expiresIn: process.env.JWT_EXPIRE || '30d' });
         return res.status(200).json({
             success: true,
-            message: 'تم إعادة تعيين كلمة المرور بنجاح',
-            token,
-            user: {
-                id: user._id,
-                phoneNumber: user.phoneNumber,
-                fullName: user.fullName || '',
-                lastName: user.lastName || '',
-                email: user.email || '',
-                isProfileComplete: user.isProfileComplete
-            }
+            message: 'تمت إعادة تعيين كلمة المرور بنجاح'
         });
     }
     catch (error) {
