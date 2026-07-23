@@ -46,5 +46,11 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # tini يضمن تمرير إشارات الإيقاف فيُغلق اتصال Postgres بنظافة
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# الترحيلات تُطبَّق عند الإقلاع — migrate deploy آمن للتكرار ولا ينشئ ترحيلات جديدة
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+# الترحيلات ودوال العربية تُطبَّق عند الإقلاع.
+#
+# كلاهما آمن للتكرار: `migrate deploy` يتخطى المطبَّق سلفًا، وملف
+# التطبيع العربي مكتوب بـ CREATE OR REPLACE و IF NOT EXISTS.
+#
+# كان تطبيق دوال العربية خطوة يدوية بعد كل نشر — ونسيانها يُعطّل
+# المطابقة بالكامل بلا أي رسالة خطأ ظاهرة.
+CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db execute --file prisma/sql/001_arabic_normalization.sql --schema prisma/schema.prisma && node dist/index.js"]
