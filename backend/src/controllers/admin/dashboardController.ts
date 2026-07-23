@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../types/express';
 import prisma from '../../config/prisma';
+import { categoryLabel, typeLabel } from '../../utils/arabicLabels';
 
 /**
  * إحصائيات لوحة التحكم.
@@ -221,7 +222,7 @@ export const getRecentActivity = async (req: AuthRequest, res: Response) => {
       ...ads.map((a) => ({
         id: a.id,
         type: a.status === 'approved' ? 'document_approved' : 'document_added',
-        message: `إعلان ${a.type === 'lost' ? 'مفقود' : 'موجود'} من نوع ${a.category}`,
+        message: `إعلان ${typeLabel(a.type)} من نوع ${categoryLabel(a.category)}`,
         timestamp: a.createdAt,
         userId: a.user?.id,
         userName: a.user?.fullName ?? undefined,
