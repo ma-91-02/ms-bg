@@ -201,6 +201,23 @@ const AdvertisementsList: React.FC = () => {
     setSelectedAdId(null);
   };
 
+  /**
+   * شارة نوع الإعلان: مفقود أو موجود.
+   *
+   * أهمّ تصنيف في الإعلان ولم يكن معروضًا على الكرت إطلاقًا، فيقرأ
+   * المشرف قائمةً كاملة دون أن يعرف أيّها بلاغ فقدان وأيّها بلاغ
+   * عثور — وهو الفرق الذي يحدّد الإجراء كلّه.
+   */
+  const getTypeBadge = (type?: string) => {
+    if (type === 'lost') {
+      return <span className="ad-type-badge is-lost"><i className="fas fa-search"></i> مفقود</span>;
+    }
+    if (type === 'found') {
+      return <span className="ad-type-badge is-found"><i className="fas fa-hand-paper"></i> موجود</span>;
+    }
+    return null;
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -395,6 +412,15 @@ const AdvertisementsList: React.FC = () => {
                   className="ad-card"
                   onClick={() => ad.id && handleViewDetails(ad.id)}
                 >
+                  {/* شريط الحالة والنوع أعلى الكرت.
+                      كانت شارة الحالة مطبوعة فوق الصورة: تختفي خلف
+                      الصور الفاتحة، وتغيب عن العين لأن المشرف يقرأ
+                      العنوان لا الصورة */}
+                  <div className="ad-card-top">
+                    {getTypeBadge(ad.type)}
+                    {getStatusBadge(ad.status || 'pending')}
+                  </div>
+
                   <div className="ad-card-header">
                     <div className="ad-image-container">
                       {ad.images && ad.images.length > 0 && !brokenImages.has(ad.images[0]) ? (
@@ -408,52 +434,77 @@ const AdvertisementsList: React.FC = () => {
                         />
                       ) : (
                         <div className="no-image">
+                          <i className="fas fa-image"></i>
                           <span>لا توجد صورة</span>
                         </div>
                       )}
-                      <div className="image-status-overlay">
-                        {getStatusBadge(ad.status || 'pending')}
-                      </div>
+                      {ad.images && ad.images.length > 1 && (
+                        <span className="image-count" title={`${ad.images.length} صور`}>
+                          <i className="fas fa-images"></i> {ad.images.length}
+                        </span>
+                      )}
                     </div>
+
                     <div className="ad-info">
-                      <h3>{getTranslatedDocumentType(ad.documentType)}</h3>
-                      {/* اسم صاحب المستمسك حقل اختياري في نموذج النشر.
-                          كان الملصق يظهر دائمًا فيبقى «اسم:» معلّقًا بلا
-                          قيمة على البطاقات التي تُرك فيها فارغًا */}
-                      <div className="ad-document-info">
-                        <span className="document-title">اسم:</span>
-                        <span className={`document-value ${ad.name ? '' : 'is-empty'}`}>
-                          {ad.name ? safeRender(ad.name) : 'غير مذكور'}
-                        </span>
-                      </div>
-                      
-                      <div className="ad-user-info">
-                        <span 
-                          className="user-name-link"
-                          onClick={(e) => navigateToUserProfile(ad.userId, e)}
-                          title="عرض ملف الناشر"
-                        >
-                          <i className="fas fa-user publisher-icon"></i> {getPublisherName(ad)}
-                          <span className="user-actions">
-                            <i 
-                              className="fab fa-whatsapp user-whatsapp-icon" 
-                              title="اتصال واتساب"
-                              onClick={(e) => handleWhatsappUser(ad, e)}
-                            ></i>
-                          </span>
-                        </span>
-                      </div>
-                      
+                      <h3 className="ad-title">{getTranslatedDocumentType(ad.documentType)}</h3>
+
+                      {/* رقم المستمسك أقوى دليل للمطابقة، وكان الخادم
+                          يرسله ولا يظهر على الكرت */}
+                      {ad.itemNumber && (
+                        <div className="ad-item-number" title="رقم المستمسك">
+                          <i className="fas fa-hashtag"></i>
+                          <span dir="ltr">{ad.itemNumber}</span>
+                        </div>
+                      )}
+
+                      {/* اسم صاحب المستمسك حقل اختياري في نموذج النشر،
+                          فلا يُعرض سطره حين يُترك فارغًا */}
+                      {ad.name && (
+                        <div className="ad-owner">
+                          <i className="fas fa-id-card"></i> {safeRender(ad.name)}
+                        </div>
+                      )}
+
                       <div className="ad-meta">
                         <span className="ad-location">
-                          <i className="fas fa-map-marker-alt location-icon"></i> {getTranslatedLocation(ad.location)}
+                          <i className="fas fa-map-marker-alt"></i> {getTranslatedLocation(ad.location)}
                         </span>
                         <span className="ad-date">
-                          <i className="fas fa-calendar-alt"></i> {ad.date || 'غير متوفر'}
+                          <i className="fas fa-calendar-alt"></i> {ad.date || '—'}
                         </span>
                       </div>
                     </div>
                   </div>
+
+                  <div className="ad-publisher">
+                    <span 
+                      className="user-name-link"
+                      onClick={(e) => navigateToUserProfile(ad.userId, e)}
+                      title="عرض ملف الناشر"
+                    >
+                      <i className="fas fa-user"></i> {getPublisherName(ad)}
+                    </span>
+                    <button
+                      type="button"
+                      className="whatsapp-btn"
+                      title="مراسلة الناشر على واتساب"
+                      onClick={(e) => handleWhatsappUser(ad, e)}
+                    >
+                      <i className="fab fa-whatsapp"></i>
+                    </button>
+                  </div>
+
+                  {/* سبب الرفض كان يُخزَّن ولا يُعرض، فيبقى المشرف
+                      لا يعرف لماذا رُفض الإعلان */}
+                  {ad.status === 'rejected' && ad.rejectionReason && (
+                    <div className="ad-rejection-reason">
+                      <i className="fas fa-info-circle"></i> {ad.rejectionReason}
+                    </div>
+                  )}
+                  {/* الإجراءات تتبع حالة الإعلان.
+                      «تحديد كمحلول» كان يُعرض على إعلان لم يُعتمد بعد —
+                      إجراء لا معنى له — وكانت الأزرار الخمسة في صفّ لا
+                      ينكسر فيُقصّ «حذف» خارج حدّ الكرت */}
                   <div className="ad-card-footer">
                     <button 
                       className="btn btn-sm btn-outline-primary details-btn"
@@ -465,7 +516,7 @@ const AdvertisementsList: React.FC = () => {
                       <i className="fas fa-eye"></i> عرض التفاصيل
                     </button>
                     <div className="action-buttons">
-                      {ad.status !== 'approved' && (
+                      {ad.status !== 'approved' && ad.status !== 'resolved' && (
                         <button 
                           className="btn btn-sm btn-success" 
                           onClick={(e) => ad.id && handleApprove(ad.id, e)}
@@ -475,9 +526,9 @@ const AdvertisementsList: React.FC = () => {
                         </button>
                       )}
                       
-                      {ad.status !== 'rejected' && (
+                      {ad.status !== 'rejected' && ad.status !== 'resolved' && (
                         <button 
-                          className="btn btn-sm btn-danger mx-1" 
+                          className="btn btn-sm btn-danger" 
                           onClick={(e) => ad.id && handleReject(ad.id, e)}
                           disabled={!ad.id || currentAction === 'reject'}
                         >
@@ -485,7 +536,7 @@ const AdvertisementsList: React.FC = () => {
                         </button>
                       )}
                       
-                      {ad.status !== 'resolved' && (
+                      {ad.status === 'approved' && (
                         <button 
                           className="btn btn-sm btn-info" 
                           onClick={(e) => ad.id && handleResolve(ad.id, e)}
@@ -496,10 +547,13 @@ const AdvertisementsList: React.FC = () => {
                       )}
                       
                       <button 
-                        className="btn btn-sm btn-outline-danger mx-1" 
+                        className="btn btn-sm btn-outline-danger" 
+                        title="حذف الإعلان"
                         onClick={(e) => ad.id && handleDelete(ad.id, e)}
                         disabled={!ad.id || currentAction === 'delete'}
                       >
+                        {/* الحذف لا رجعة فيه: يبقى نصّه ظاهرًا ولا
+                            يُختصر إلى أيقونة تُلمس بالخطأ */}
                         <i className="fas fa-trash"></i> حذف
                       </button>
                     </div>

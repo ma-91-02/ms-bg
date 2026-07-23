@@ -262,3 +262,242 @@
   width: 100%;
   overflow-x: auto;
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   بطاقة طلب التواصل
+
+   القرار هنا كشف رقم هاتف شخص لشخص آخر — قرار خصوصية لا إجراء
+   إداري روتيني. والجدول القديم كان يعرض ثمانية أعمدة بينها رقم
+   متسلسل لا فائدة منه، ويقصّ سبب الطلب إلى بضعة أحرف رغم أنه
+   المُدخَل الوحيد الذي يبني عليه المشرف قراره، ويختصر الموافقة
+   والرفض إلى أيقونتين بحجم عشرين بكسل بلا نصّ.
+
+   المحدِّدات مقيَّدة بـ `.contact-card` أو `.contact-requests-list`.
+   ══════════════════════════════════════════════════════════════ */
+
+.contact-requests-container .contact-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.contact-card {
+  border: 1px solid #e4e7ee;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px 16px;
+}
+
+.contact-card.status-pending {
+  border-inline-start: 4px solid #f0ad4e;
+}
+
+.contact-card.status-approved {
+  border-inline-start: 4px solid #47a06d;
+}
+
+.contact-card.status-rejected {
+  border-inline-start: 4px solid #d9534f;
+  opacity: 0.8;
+}
+
+.contact-card .contact-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.contact-card .contact-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+  color: #79808f;
+  font-size: 13px;
+}
+
+/* ── الطرفان ── */
+.contact-card .contact-parties {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.contact-card .party {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f7f8fc;
+  min-width: 0;
+}
+
+.contact-card .party-role {
+  color: #79808f;
+  font-size: 12px;
+}
+
+.contact-card .party-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #3b5bdb;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-card .party-name:hover {
+  text-decoration: underline;
+}
+
+.contact-card .party-name i {
+  color: #98a2b8;
+  font-size: 12px;
+}
+
+.contact-card .party-name.is-empty {
+  color: #aeb3c0;
+  cursor: default;
+  font-weight: 400;
+}
+
+.contact-card .party-phone {
+  color: #4a5568;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* رقم صاحب الإعلان هو محلّ القرار: يُذكَر أنه محجوب ولا يُعرض */
+.contact-card .party-phone.is-hidden {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9aa0a6;
+  font-style: italic;
+}
+
+.contact-card .party-arrow {
+  align-self: center;
+  color: #c3c8d4;
+  font-size: 13px;
+}
+
+/* ── الإعلان ── */
+.contact-card .contact-ad {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px dashed #dfe3ec;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.contact-card .contact-ad:hover {
+  background: #fafbfd;
+}
+
+.contact-card .ad-type-tag {
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.contact-card .ad-type-tag.is-lost {
+  background: #fdecea;
+  color: #c0392b;
+}
+
+.contact-card .ad-type-tag.is-found {
+  background: #e8f5e9;
+  color: #1e7e34;
+}
+
+.contact-card .ad-category {
+  font-weight: 600;
+  color: #2c3244;
+}
+
+.contact-card .ad-gov {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #6c7386;
+}
+
+/* ── سبب الطلب ── */
+.contact-card .contact-reason {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #fbfbfd;
+  border: 1px solid #eff1f6;
+}
+
+.contact-card .reason-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #79808f;
+  font-size: 12px;
+}
+
+/* السبب يُعرض كاملًا: كان مقصوصًا بـ ellipsis إلى سطر واحد */
+.contact-card .contact-reason p {
+  margin: 0;
+  color: #2c3244;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.contact-card .contact-rejection {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: #fdecea;
+  color: #8c2f26;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── الإجراءات ── */
+.contact-card .contact-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f3f8;
+}
+
+.contact-card .contact-card-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .contact-card .contact-parties {
+    flex-direction: column;
+  }
+
+  .contact-card .party-arrow {
+    transform: rotate(-90deg);
+  }
+}

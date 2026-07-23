@@ -5,6 +5,16 @@ export interface Advertisement {
   id?: string;
   name?: string;
   documentType?: string;
+  /**
+   * مفقود أو موجود — أهمّ تصنيف في الإعلان، وكان الخادم يرسله
+   * وتُسقطه طبقة التحويل فلا يظهر على الكرت إطلاقًا. المشرف يقرأ
+   * قائمة الإعلانات دون أن يعرف أيّها بلاغ فقدان وأيّها عثور.
+   */
+  type?: 'lost' | 'found';
+  /** رقم المستمسك — أقوى دليل للمطابقة */
+  itemNumber?: string;
+  /** سبب الرفض — كان يُخزَّن ولا يُعرض */
+  rejectionReason?: string;
   location?: string;
   landmark?: string;
   phone?: string;
@@ -74,6 +84,9 @@ const transformAdvertisementData = (item: any): Advertisement => {
     // استخدام اسم المستخدم إذا كان مُضمناً في كائن المستخدم
     name: item.ownerName || item.name || '',
     documentType: item.category || item.documentType || '',
+    type: item.type,
+    itemNumber: item.itemNumber || '',
+    rejectionReason: item.rejectionReason || '',
     location: item.governorate || item.location || '',
     landmark: item.landmark || '',
     phone: item.contactPhone || item.phone || '',

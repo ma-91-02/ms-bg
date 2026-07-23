@@ -264,16 +264,24 @@ const MatchesList: React.FC = () => {
       <div className="matching-system-info">
         <details>
           <summary>معلومات عن نظام المطابقة <i className="fas fa-info-circle"></i></summary>
+          {/* النصّ هنا يصف الخوارزمية كما هي في
+              `backend/src/services/common/matchingService.ts`.
+              النسخة السابقة كانت تقول إن التطابق «يتم فقط بين
+              الإعلانات من نفس المحافظة» — وهذا غير صحيح: المحافظة
+              عامل موزون بعشر نقاط لا مرشِّح، فمطابقة برقم مستمسك
+              متطابق (60 نقطة) تعبر المحافظات وتتجاوز عتبة القبول
+              وحدها. مشرف يقرأ الوصف الخاطئ يستبعد مطابقة صحيحة. */}
           <div className="info-content">
-            <p>نظام المطابقة يقوم تلقائياً بالبحث عن تطابقات محتملة بين إعلانات الأشياء المفقودة وإعلانات الأشياء الموجودة.</p>
-            <p>يعتمد النظام على مقارنة الحقول التالية:</p>
+            <p>يبحث النظام تلقائيًا عن تطابقات محتملة بين إعلانات المستمسكات المفقودة والموجودة من النوع نفسه.</p>
+            <p>لكل حقل وزن يُجمَع في درجة التطابق:</p>
             <ul>
-              <li><strong>المحافظة والنوع:</strong> يتم التطابق فقط بين الإعلانات من نفس النوع (هوية، جواز سفر، الخ) ومن نفس المحافظة.</li>
-              <li><strong>رقم المستند:</strong> يعطي وزن عالي جداً للتطابق (60% من درجة التطابق).</li>
-              <li><strong>اسم المالك:</strong> يعطي وزن متوسط للتطابق (30% من درجة التطابق).</li>
-              <li><strong>الوصف:</strong> يعطي وزن منخفض للتطابق (10% من درجة التطابق).</li>
+              <li><strong>رقم المستمسك — 60 نقطة:</strong> أقوى دليل، ويكفي وحده لإنشاء مطابقة.</li>
+              <li><strong>اسم صاحب المستمسك — 30 نقطة:</strong> المقارنة تتجاهل الهمزات والتشكيل، فـ«احمد» و«أحمد» سواء.</li>
+              <li><strong>المحافظة — 10 نقاط:</strong> عامل مرجّح لا شرط؛ قد تتطابق إعلانات من محافظتين مختلفتين.</li>
+              <li><strong>الوصف — 5 إلى 10 نقاط:</strong> حسب قوة التشابه.</li>
             </ul>
-            <p>اضغط على زر <strong>تحديث المطابقات</strong> لإعادة المسح والبحث عن تطابقات جديدة.</p>
+            <p>لا تُنشأ مطابقة إن كان مجموع الدرجات أقل من <strong>15</strong>.</p>
+            <p>اضغط <strong>تحديث المطابقات</strong> لإعادة المسح والبحث عن تطابقات جديدة.</p>
           </div>
         </details>
       </div>
@@ -323,106 +331,138 @@ const MatchesList: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="matches-table-container">
-            <table className="matches-table">
-              <thead>
-                <tr>
-                  <th>رقم المطابقة</th>
-                  <th>بيانات الإعلان المفقود</th>
-                  <th>بيانات الإعلان الموجود</th>
-                  <th>نسبة التطابق</th>
-                  <th>تاريخ المطابقة</th>
-                  <th>الحالة</th>
-                  <th>الإجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredMatches.map((match) => (
-                  <tr key={match.id} className={match.status === 'pending' ? 'pending-row' : ''}>
-                    <td data-label="رقم المطابقة">{match.id.substring(0, 8)}...</td>
-                    <td className="advertisement-cell" data-label="بيانات الإعلان المفقود">
-                      {match.lostAdvertisement ? (
-                        <div className="ad-info">
-                          <div className="ad-title" onClick={() => match.lostAdvertisement?.id && navigateToAdvertisement(match.lostAdvertisement.id)}>
-                            {getTranslatedType(match.lostAdvertisement.documentType)} - {match.lostAdvertisement.name || 'غير معروف'}
-                          </div>
-                          <div className="ad-meta">
-                            <span>
-                              <i className="fas fa-map-marker-alt"></i> {getTranslatedLocation(match.lostAdvertisement.location)}
-                            </span>
-                            <span>
-                              <i className="fas fa-user"></i> {match.lostAdvertisement.publisherName || 'غير معروف'}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="not-available">بيانات غير متوفرة</span>
-                      )}
-                    </td>
-                    <td className="advertisement-cell" data-label="بيانات الإعلان الموجود">
-                      {match.foundAdvertisement ? (
-                        <div className="ad-info">
-                          <div className="ad-title" onClick={() => match.foundAdvertisement?.id && navigateToAdvertisement(match.foundAdvertisement.id)}>
-                            {getTranslatedType(match.foundAdvertisement.documentType)} - {match.foundAdvertisement.name || 'غير معروف'}
-                          </div>
-                          <div className="ad-meta">
-                            <span>
-                              <i className="fas fa-map-marker-alt"></i> {getTranslatedLocation(match.foundAdvertisement.location)}
-                            </span>
-                            <span>
-                              <i className="fas fa-user"></i> {match.foundAdvertisement.publisherName || 'غير معروف'}
-                            </span>
-                            {match.foundAdvertisement.phone && (
-                              <a 
-                                href={`https://wa.me/${match.foundAdvertisement.phone.replace(/\D/g, '')}`} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="whatsapp-link"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <i className="fab fa-whatsapp"></i> واتساب
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="not-available">بيانات غير متوفرة</span>
-                      )}
-                    </td>
-                    <td data-label="نسبة التطابق">{getMatchScoreWithColor(match.matchScore)}</td>
-                    <td data-label="تاريخ المطابقة">{match.createdAt}</td>
-                    <td data-label="الحالة">{getStatusBadge(match.status)}</td>
-                    <td data-label="الإجراءات">
-                      <div className="action-buttons">
-                        {match.status === 'pending' && (
-                          <>
-                            <button 
-                              className="btn btn-sm btn-success" 
-                              onClick={() => handleApproveMatch(match.id)}
-                              disabled={loading}
-                            >
-                              <i className="fas fa-check"></i> موافقة
-                            </button>
-                            <button 
-                              className="btn btn-sm btn-danger" 
-                              onClick={() => openRejectModal(match.id)}
-                              disabled={loading}
-                            >
-                              <i className="fas fa-times"></i> رفض
-                            </button>
-                          </>
-                        )}
-                        {match.status === 'rejected' && match.notes && (
-                          <span className="rejection-reason" title={match.notes}>
-                            <i className="fas fa-info-circle"></i> سبب الرفض
-                          </span>
-                        )}
+          <div className="matches-list">
+            {filteredMatches.map((match) => {
+              const matched = new Set(match.matchingFields || []);
+              const lost = match.lostAdvertisement;
+              const found = match.foundAdvertisement;
+
+              /**
+               * صفوف المقارنة.
+               *
+               * قرار المشرف هنا واحد: هل الإعلانان لمستمسك واحد؟ ولا
+               * يُتّخذ إلا بمقابلة الحقول حقلًا بحقل. الجدول القديم كان
+               * يضع كل إعلان في خلية واحدة كنصّ مدموج
+               * («جواز سفر - أحمد علي حسن») ويترك للمشرف أن يقارن
+               * بعينه سطرين متباعدين، ولا يخبره أيّ الحقول تطابق فعلًا
+               * رغم أن الخادم يرسلها في `matchingFields`.
+               */
+              const rows: Array<{ key: string; label: string; a?: string; b?: string; ltr?: boolean }> = [
+                { key: 'category', label: 'نوع المستمسك',
+                  a: getTranslatedType(lost?.documentType), b: getTranslatedType(found?.documentType) },
+                { key: 'itemNumber', label: 'رقم المستمسك',
+                  a: lost?.itemNumber, b: found?.itemNumber, ltr: true },
+                { key: 'ownerName', label: 'اسم صاحب المستمسك',
+                  a: lost?.name, b: found?.name },
+                { key: 'governorate', label: 'المحافظة',
+                  a: getTranslatedLocation(lost?.location), b: getTranslatedLocation(found?.location) },
+              ];
+
+              return (
+                <div key={match.id} className={`match-card status-${match.status}`}>
+                  <div className="match-card-head">
+                    <span className={`match-score-chip ${match.matchScore >= 80 ? 'is-high' : match.matchScore >= 50 ? 'is-mid' : 'is-low'}`}>
+                      {match.matchScore}%
+                    </span>
+                    <span className="match-head-meta">
+                      <i className="fas fa-calendar-alt"></i> {match.createdAt}
+                    </span>
+                    <span className="match-head-status">{getStatusBadge(match.status)}</span>
+                  </div>
+
+                  <div className="match-compare">
+                    <div className="match-compare-head">
+                      <span className="col-label" />
+                      <span className="col-side is-lost">
+                        <i className="fas fa-search"></i> الإعلان المفقود
+                      </span>
+                      <span className="col-side is-found">
+                        <i className="fas fa-hand-paper"></i> الإعلان الموجود
+                      </span>
+                    </div>
+
+                    {rows.map((row) => (
+                      <div
+                        key={row.key}
+                        className={`match-compare-row ${matched.has(row.key) ? 'is-matched' : ''}`}
+                      >
+                        <span className="col-label">
+                          {matched.has(row.key) && (
+                            <i className="fas fa-check match-tick" title="تطابق هذا الحقل" />
+                          )}
+                          {row.label}
+                        </span>
+                        <span className="col-side" dir={row.ltr ? 'ltr' : undefined}>
+                          {row.a || <em className="is-empty">—</em>}
+                        </span>
+                        <span className="col-side" dir={row.ltr ? 'ltr' : undefined}>
+                          {row.b || <em className="is-empty">—</em>}
+                        </span>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    ))}
+
+                    <div className="match-compare-row is-publisher">
+                      <span className="col-label">الناشر</span>
+                      <span className="col-side">
+                        <span
+                          className="ad-open-link"
+                          onClick={() => lost?.id && navigateToAdvertisement(lost.id)}
+                          title="فتح الإعلان"
+                        >
+                          <i className="fas fa-user" /> {lost?.publisherName || '—'}
+                        </span>
+                      </span>
+                      <span className="col-side">
+                        <span
+                          className="ad-open-link"
+                          onClick={() => found?.id && navigateToAdvertisement(found.id)}
+                          title="فتح الإعلان"
+                        >
+                          <i className="fas fa-user" /> {found?.publisherName || '—'}
+                        </span>
+                        {found?.phone && (
+                          <a
+                            href={`https://wa.me/${found.phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="match-whatsapp"
+                            title="مراسلة ناشر الإعلان الموجود"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <i className="fab fa-whatsapp" />
+                          </a>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  {match.status === 'rejected' && match.notes && (
+                    <div className="match-rejection">
+                      <i className="fas fa-info-circle" /> {match.notes}
+                    </div>
+                  )}
+
+                  {match.status === 'pending' && (
+                    <div className="match-card-actions">
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => handleApproveMatch(match.id)}
+                        disabled={loading}
+                      >
+                        <i className="fas fa-check" /> موافقة
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => openRejectModal(match.id)}
+                        disabled={loading}
+                      >
+                        <i className="fas fa-times" /> رفض
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* أزرار التنقل بين الصفحات */}

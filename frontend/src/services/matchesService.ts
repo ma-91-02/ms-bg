@@ -37,6 +37,10 @@ const transformAd = (ad: any): Advertisement | undefined => {
     documentType: ad.category || '',
     location: ad.governorate || '',
     name: ad.ownerName || '',
+    // رقم المستمسك هو الحقل الذي تقوم عليه المطابقة أصلًا، وكان
+    // يُسقَط هنا فلا يراه المشرف وهو يقرّر قبول المطابقة أو رفضها
+    itemNumber: ad.itemNumber || '',
+    type: ad.type,
     description: ad.description || '',
     images: ad.images || [],
     userId: ad.userId || '',

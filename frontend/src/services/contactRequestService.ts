@@ -40,13 +40,38 @@ export interface ContactInfo {
   userPhone: string;
 }
 
-// تحويل البيانات من صيغة API إلى صيغة الواجهة
+/**
+ * تحويل البيانات من صيغة API إلى صيغة الواجهة.
+ *
+ * علّة أُصلحت هنا: كانت الدالة تقرأ البيانات المضمَّنة من
+ * `data.userId` و`data.advertiserUserId` و`data.advertisementId`
+ * باعتبارها كائنات — وهو صحيح مع Mongoose الذي يستبدل المفتاح
+ * بالكائن عند populate. ومع Prisma صار المفتاح والعلاقة حقلين
+ * منفصلين: `userId` نصّ و`user` كائن.
+ *
+ * فكان الشرط `typeof data.userId === 'object'` يفشل دائمًا، وتخرج
+ * كل البيانات المضمَّنة `undefined`. النتيجة أن شاشة طلبات التواصل
+ * تعرض «غير معروف» في مكان مقدّم الطلب وصاحب الإعلان معًا — وهي
+ * الشاشة التي يُقرَّر فيها كشف رقم هاتف شخص لشخص آخر.
+ */
 const transformContactRequest = (data: any): ContactRequest => {
+  // كلا الشكلين مقبولان: كائن مضمَّن (Mongo) أو حقل علاقة (Prisma)
+  const embedded = (relation: any, legacyKey: any) =>
+    relation && typeof relation === 'object'
+      ? relation
+      : legacyKey && typeof legacyKey === 'object'
+      ? legacyKey
+      : undefined;
+
+  const requester = embedded(data.user, data.userId);
+  const advertiser = embedded(data.advertiserUser, data.advertiserUserId);
+  const ad = embedded(data.advertisement, data.advertisementId);
+
   return {
     id: data._id || data.id,
-    userId: data.userId?._id || (typeof data.userId === 'string' ? data.userId : ''),
-    advertisementId: data.advertisementId?._id || (typeof data.advertisementId === 'string' ? data.advertisementId : ''),
-    advertiserUserId: data.advertiserUserId?._id || (typeof data.advertiserUserId === 'string' ? data.advertiserUserId : ''),
+    userId: requester?.id || requester?._id || (typeof data.userId === 'string' ? data.userId : ''),
+    advertisementId: ad?.id || ad?._id || (typeof data.advertisementId === 'string' ? data.advertisementId : ''),
+    advertiserUserId: advertiser?.id || advertiser?._id || (typeof data.advertiserUserId === 'string' ? data.advertiserUserId : ''),
     reason: data.reason || '',
     status: data.status || 'pending',
     approvedBy: data.approvedBy || undefined,
@@ -55,23 +80,23 @@ const transformContactRequest = (data: any): ContactRequest => {
     createdAt: data.createdAt ? new Date(data.createdAt).toLocaleString('ar-EG') : '',
     updatedAt: data.updatedAt ? new Date(data.updatedAt).toLocaleString('ar-EG') : '',
     // البيانات المضمنة
-    user: data.userId && typeof data.userId === 'object' ? {
-      id: data.userId._id || '',
-      fullName: data.userId.fullName || '',
-      phoneNumber: data.userId.phoneNumber || ''
+    user: requester ? {
+      id: requester.id || requester._id || '',
+      fullName: requester.fullName || '',
+      phoneNumber: requester.phoneNumber || ''
     } : undefined,
-    advertiserUser: data.advertiserUserId && typeof data.advertiserUserId === 'object' ? {
-      id: data.advertiserUserId._id || '',
-      fullName: data.advertiserUserId.fullName || '',
-      phoneNumber: data.advertiserUserId.phoneNumber || ''
+    advertiserUser: advertiser ? {
+      id: advertiser.id || advertiser._id || '',
+      fullName: advertiser.fullName || '',
+      phoneNumber: advertiser.phoneNumber || ''
     } : undefined,
-    advertisement: data.advertisementId && typeof data.advertisementId === 'object' ? {
-      id: data.advertisementId._id || '',
-      type: data.advertisementId.type || '',
-      category: data.advertisementId.category || '',
-      governorate: data.advertisementId.governorate || '',
-      description: data.advertisementId.description || '',
-      status: data.advertisementId.status || ''
+    advertisement: ad ? {
+      id: ad.id || ad._id || '',
+      type: ad.type || '',
+      category: ad.category || '',
+      governorate: ad.governorate || '',
+      description: ad.description || '',
+      status: ad.status || ''
     } : undefined
   };
 };

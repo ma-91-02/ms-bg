@@ -256,17 +256,14 @@
   text-decoration: underline;
 }
 
-.user-name-link .publisher-icon::before {
-  content: '👤';
-  margin-left: 5px;
-  font-size: 0.85em;
-}
-
-.location-icon::before {
-  content: '📍';
-  margin-left: 3px;
-  font-size: 0.85em;
-}
+/*
+ * حُذفت هنا قاعدتان تحقنان رمزَي 👤 و📍 عبر `::before`.
+ *
+ * الترميز يستخدم أيقونات Font Awesome لهذين المعنيين أصلًا، فكان كل
+ * سطر يعرض أيقونتين متجاورتين لنفس الشيء: أيقونة الحزمة ثم الرمز
+ * التعبيري. ومع اختلاف رسم الرموز بين أنظمة التشغيل يتغيّر شكل
+ * اللوحة من جهاز لآخر بلا سبب.
+ */
 
 /* تحسين مظهر حقول الموقع والتاريخ */
 .ad-location, .ad-date {
@@ -361,22 +358,12 @@
   align-items: center;
 }
 
-.user-name-link {
-  color: #1976d2;
-  cursor: pointer;
-  position: relative;
-  transition: color 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  font-weight: 500;
-  width: 100%;
-  justify-content: space-between;
-}
-
-.user-name-link:hover {
-  color: #0d47a1;
-  text-decoration: underline;
-}
+/*
+ * حُذف هنا تعريف ثانٍ لـ `.user-name-link` يضيف
+ * `width: 100%; justify-content: space-between` فوق التعريف الأول.
+ * أثره أن اسم الناشر يتمدّد بعرض الصفّ كلّه وتتباعد أيقونته عن نصّه
+ * إلى طرفَي البطاقة، فيبدو السطر مفكّكًا لا كتلةً واحدة.
+ */
 
 .user-name-link .fas.fa-user {
   margin-left: 8px;
@@ -543,4 +530,275 @@
 .document-value.is-empty {
   color: #9aa0a6;
   font-style: italic;
+}
+
+
+/*
+ * كل ما يلي مقيَّد بـ `.ad-card`.
+ *
+ * أسماء مثل `.ad-title` و`.ad-meta` و`.ad-info` مستخدَمة أيضًا في
+ * جدول المطابقات، وملفّات الأنماط هنا تُحمَّل مع اللوحة كلّها. بلا
+ * تقييد تتسرّب أحجام الخطوط والهوامش إلى شاشة أخرى وتكسر تخطيطها —
+ * وهو ما حدث فعلًا.
+ */
+
+/* ══════════════════════════════════════════════════════════════
+   كرت الإعلان — إعادة تنظيم
+
+   كان الكرت يعرض نوع المستمسك والاسم والناشر والموقع والتاريخ في
+   كتلة واحدة متساوية الوزن، ويحجب أهمّ حقلين: نوع الإعلان
+   (مفقود/موجود) ورقم المستمسك. وكانت شارة الحالة مطبوعة فوق
+   الصورة حيث لا ينظر أحد.
+
+   الترتيب هنا يتبع ما يحتاجه المشرف بهذا التسلسل:
+     نوع البلاغ وحالته → نوع المستمسك ورقمه → الموقع والتاريخ →
+     الناشر → الإجراءات
+   ══════════════════════════════════════════════════════════════ */
+
+.ad-card {
+  display: flex;
+  flex-direction: column;
+  /* الحدّ يبرز الكرت على خلفية فاتحة أوضح من الظلّ وحده */
+  border: 1px solid #eceef3;
+}
+
+/* ── شريط النوع والحالة ── */
+.ad-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 15px 0;
+}
+
+.ad-card .ad-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* لونان متباعدان: التمييز بلمحة لا بقراءة */
+.ad-card .ad-type-badge.is-lost {
+  background: #fdecea;
+  color: #c0392b;
+}
+
+.ad-card .ad-type-badge.is-found {
+  background: #e8f5e9;
+  color: #1e7e34;
+}
+
+/* الحالة ثانوية بجانب النوع، فتُدفع إلى الطرف المقابل */
+.ad-card-top .status-badge-list {
+  margin-inline-start: auto;
+}
+
+/* ── الجسم ── */
+.ad-card-header {
+  align-items: flex-start;
+}
+
+.ad-card .ad-image-container {
+  position: relative;
+}
+
+.ad-card .no-image {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ad-card .no-image i {
+  font-size: 22px;
+  opacity: 0.45;
+}
+
+/* عدّاد الصور: كان وجود صور إضافية غير معروف حتى فتح التفاصيل */
+.ad-card .image-count {
+  position: absolute;
+  bottom: 5px;
+  inset-inline-start: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 11px;
+}
+
+.ad-card .ad-title {
+  margin: 0 0 6px 0 !important;
+  font-size: 17px !important;
+  font-weight: 700;
+}
+
+.ad-card .ad-item-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: #f1f3f9;
+  color: #38415c;
+  font-size: 13px;
+  font-weight: 600;
+  /* الرقم لاتيني داخل صفحة عربية: يُعزَل كي لا تتقدّمه رموزه */
+  font-variant-numeric: tabular-nums;
+}
+
+.ad-card .ad-owner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px 0 !important;
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.ad-owner i,
+.ad-card .ad-item-number i {
+  color: #8a93a8;
+  font-size: 12px;
+}
+
+.ad-card .ad-meta {
+  gap: 10px;
+  margin-bottom: 0 !important;
+  flex-wrap: wrap;
+}
+
+.ad-card .ad-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── الناشر ── */
+.ad-card .ad-publisher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 15px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #f7f8fc;
+  font-size: 14px;
+}
+
+.ad-card .ad-publisher .user-name-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #3b5bdb;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-card .ad-publisher .user-name-link:hover {
+  text-decoration: underline;
+}
+
+.ad-card .ad-publisher .user-name-link i {
+  color: #98a2b8;
+}
+
+/* زرّ لا أيقونة عائمة: مساحة لمس حقيقية ودلالة واضحة على أنه فعل */
+.ad-card .whatsapp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: #25d366;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ad-card .whatsapp-btn:hover {
+  background: #128c7e;
+}
+
+/* ── سبب الرفض ── */
+.ad-card .ad-rejection-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 10px 15px 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: #fdecea;
+  color: #8c2f26;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ── التذييل ── */
+.ad-card-footer {
+  /* يُدفع لأسفل الكرت فتتساوى أطراف البطاقات في الشبكة مهما
+     اختلف طول محتواها */
+  margin-top: auto;
+}
+
+.ad-card-footer .action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.ad-card-footer .action-buttons .btn {
+  margin: 0 !important;
+  white-space: nowrap;
+}
+
+
+/*
+ * زرّ الحذف.
+ *
+ * كان `btn-outline-danger` بخلفية بيضاء فوق تذييل رمادي فاتح: يكاد
+ * لا يُرى، وهو الإجراء الوحيد الذي لا رجعة فيه في الكرت. يبقى مميّزًا
+ * عن «رفض» الممتلئ — الحذف أندر وأخطر فلا يُساوى به بصريًا — لكن
+ * بتباين كافٍ ليُقرأ.
+ */
+.ad-card-footer .action-buttons .btn-outline-danger {
+  border-color: #e0685c;
+  color: #c0392b;
+  background: #fff;
+  font-weight: 600;
+}
+
+.ad-card-footer .action-buttons .btn-outline-danger:hover {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+}
+
+
+/*
+ * التذييل ينكسر ككتل لا كحروف.
+ *
+ * «عرض التفاصيل» كان ينقسم على سطرين داخل الأعمدة الضيّقة فيرتفع
+ * التذييل ويتفاوت ارتفاع البطاقات المتجاورة في الشبكة. النصّ يبقى
+ * سطرًا واحدًا، والتذييل نفسه هو ما يلتفّ عند الضيق.
+ */
+.ad-card-footer {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ad-card .details-btn {
+  white-space: nowrap;
 }

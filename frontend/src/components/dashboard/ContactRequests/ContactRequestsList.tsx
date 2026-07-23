@@ -8,7 +8,7 @@ import {
   getContactRequestsByStatus,
   ContactRequest
 } from '../../../services/contactRequestService';
-import { translateDocumentType, translateCity } from '../../../utils/translationUtils';
+import { translateDocumentType, translateCity, translateAdvertisementType } from '../../../utils/translationUtils';
 import '../../../styles/ContactRequestsList.css';
 
 const ContactRequestsList: React.FC = () => {
@@ -147,12 +147,6 @@ const ContactRequestsList: React.FC = () => {
     }
   };
 
-  // دالة لتنسيق وتحويل النوع إلى نص مفهوم
-  const getTranslatedType = (type?: string): string => {
-    if (!type) return 'غير محدد';
-    return translateDocumentType(type);
-  };
-
   // دالة لتنسيق وتحويل الموقع إلى نص مفهوم
   const getTranslatedLocation = (location?: string): string => {
     if (!location) return 'غير محدد';
@@ -244,92 +238,123 @@ const ContactRequestsList: React.FC = () => {
           <i className="fas fa-info-circle"></i> لا توجد طلبات تواصل {statusFilter !== 'all' ? `بحالة "${statusFilter === 'pending' ? 'قيد المراجعة' : statusFilter === 'approved' ? 'تمت الموافقة' : 'مرفوض'}"` : ''}.
         </div>
       ) : (
-        <div className="contact-requests-table-wrapper">
-          <table className="table contact-requests-table">
-            <thead>
-              <tr>
-                <th>رقم</th>
-                <th>مقدم الطلب</th>
-                <th>صاحب الإعلان</th>
-                <th>تفاصيل الإعلان</th>
-                <th>سبب الطلب</th>
-                <th>حالة الطلب</th>
-                <th>تاريخ التقديم</th>
-                <th>الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRequests.map((request, index) => (
-                <tr key={request.id}>
-                  <td>{(currentPage - 1) * 10 + index + 1}</td>
-                  <td>
-                    {request.user ? (
-                      <div className="user-link" onClick={() => navigateToUserProfile(request.user?.id || '')}>
-                        <i className="fas fa-user"></i>
-                        {request.user.fullName}
-                      </div>
-                    ) : 'غير معروف'}
-                  </td>
-                  <td>
-                    {request.advertiserUser ? (
-                      <div className="user-link" onClick={() => navigateToUserProfile(request.advertiserUser?.id || '')}>
-                        <i className="fas fa-user"></i>
-                        {request.advertiserUser.fullName}
-                      </div>
-                    ) : 'غير معروف'}
-                  </td>
-                  <td>
-                    {request.advertisement ? (
-                      <div className="ad-link" onClick={() => navigateToAdvertisement(request.advertisement?.id || '')}>
-                        <div>
-                          <div>{getTranslatedType(request.advertisement.type)}</div>
-                          <div>{request.advertisement.category}</div>
-                          <div>{getTranslatedLocation(request.advertisement.governorate)}</div>
-                        </div>
-                      </div>
-                    ) : 'غير متاح'}
-                  </td>
-                  <td>
-                    <div className="reason-text">{request.reason}</div>
-                  </td>
-                  <td>
-                    {getStatusBadge(request.status)}
-                    {request.status === 'rejected' && request.rejectionReason && (
-                      <div className="rejection-reason">
-                        <i className="fas fa-info-circle"></i>
-                        {request.rejectionReason}
-                      </div>
-                    )}
-                  </td>
-                  <td>{request.createdAt}</td>
-                  <td>
-                    {request.status === 'pending' ? (
-                      <div className="action-buttons">
-                        <button
-                          className="btn btn-sm btn-success"
-                          onClick={() => handleApprove(request.id)}
-                          disabled={currentAction === 'approve'}
-                        >
-                          {currentAction === 'approve' ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check"></i>}
-                        </button>
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleReject(request.id)}
-                          disabled={currentAction === 'reject'}
-                        >
-                          {currentAction === 'reject' ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-times"></i>}
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="text-muted small">
-                        {request.status === 'approved' ? 'تمت الموافقة' : 'تم الرفض'}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="contact-requests-list">
+          {filteredRequests.map((request) => (
+            /*
+             * القرار هنا كشف رقم هاتف شخص لشخص آخر.
+             *
+             * الجدول القديم كان يعرض ثمانية أعمدة بينها رقم متسلسل لا
+             * فائدة منه، ويقصّ سبب الطلب إلى بضعة أحرف — وهو المُدخَل
+             * الوحيد الذي يبني عليه المشرف قراره — ويختصر الموافقة
+             * والرفض إلى أيقونتين بلا نصّ. البطاقة تعرض الطرفين
+             * والإعلان والسبب كاملًا.
+             */
+            <div key={request.id} className={`contact-card status-${request.status}`}>
+              <div className="contact-card-head">
+                {getStatusBadge(request.status)}
+                <span className="contact-date">
+                  <i className="fas fa-calendar-alt" /> {request.createdAt}
+                </span>
+              </div>
+
+              <div className="contact-parties">
+                <div className="party is-requester">
+                  <span className="party-role">مقدّم الطلب</span>
+                  {request.user ? (
+                    <>
+                      <span
+                        className="party-name"
+                        onClick={() => navigateToUserProfile(request.user?.id || '')}
+                        title="عرض ملف المستخدم"
+                      >
+                        <i className="fas fa-user" /> {request.user.fullName || 'بلا اسم'}
+                      </span>
+                      <span className="party-phone" dir="ltr">{request.user.phoneNumber}</span>
+                    </>
+                  ) : (
+                    <span className="party-name is-empty">غير معروف</span>
+                  )}
+                </div>
+
+                <i className="fas fa-arrow-left party-arrow" aria-hidden="true" />
+
+                <div className="party is-advertiser">
+                  <span className="party-role">صاحب الإعلان</span>
+                  {request.advertiserUser ? (
+                    <>
+                      <span
+                        className="party-name"
+                        onClick={() => navigateToUserProfile(request.advertiserUser?.id || '')}
+                        title="عرض ملف المستخدم"
+                      >
+                        <i className="fas fa-user" /> {request.advertiserUser.fullName || 'بلا اسم'}
+                      </span>
+                      {/* رقمه هو ما سيُكشَف عند الموافقة، فيبقى محجوبًا
+                          في القائمة ولا يُعرض إلا في ملفّه */}
+                      <span className="party-phone is-hidden">
+                        <i className="fas fa-eye-slash" /> يُكشف عند الموافقة
+                      </span>
+                    </>
+                  ) : (
+                    <span className="party-name is-empty">غير معروف</span>
+                  )}
+                </div>
+              </div>
+
+              {request.advertisement && (
+                <div
+                  className="contact-ad"
+                  onClick={() => navigateToAdvertisement(request.advertisement?.id || '')}
+                  title="فتح الإعلان"
+                >
+                  <span className={`ad-type-tag ${request.advertisement.type === 'lost' ? 'is-lost' : 'is-found'}`}>
+                    {/* `type` هنا نوع البلاغ (مفقود/موجود) لا نوع
+                        المستمسك، وكان يمرّ على قاموس المستمسكات
+                        فيخرج `lost` بالإنجليزية */}
+                    {translateAdvertisementType(request.advertisement.type)}
+                  </span>
+                  <span className="ad-category">{translateDocumentType(request.advertisement.category)}</span>
+                  <span className="ad-gov">
+                    <i className="fas fa-map-marker-alt" /> {getTranslatedLocation(request.advertisement.governorate)}
+                  </span>
+                </div>
+              )}
+
+              <div className="contact-reason">
+                <span className="reason-label">سبب الطلب</span>
+                <p>{request.reason || '—'}</p>
+              </div>
+
+              {request.status === 'rejected' && request.rejectionReason && (
+                <div className="contact-rejection">
+                  <i className="fas fa-info-circle" /> {request.rejectionReason}
+                </div>
+              )}
+
+              {request.status === 'pending' && (
+                <div className="contact-card-actions">
+                  <button
+                    className="btn btn-sm btn-success"
+                    onClick={() => handleApprove(request.id)}
+                    disabled={currentAction === 'approve'}
+                  >
+                    {currentAction === 'approve'
+                      ? <><i className="fas fa-spinner fa-spin" /> جارٍ…</>
+                      : <><i className="fas fa-check" /> موافقة وكشف الرقم</>}
+                  </button>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => handleReject(request.id)}
+                    disabled={currentAction === 'reject'}
+                  >
+                    {currentAction === 'reject'
+                      ? <><i className="fas fa-spinner fa-spin" /> جارٍ…</>
+                      : <><i className="fas fa-times" /> رفض</>}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

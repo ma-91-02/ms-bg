@@ -11,6 +11,10 @@ const governorates = [
 
 const AdvancedDocumentsList: React.FC = () => {
   const [documents, setDocuments] = useState<Advertisement[]>([]);
+  /** الإعلانات القديمة تحمل مسارات صور لم تعد موجودة على القرص */
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
+  const markImageBroken = (url: string) =>
+    setBrokenImages((prev) => (prev.has(url) ? prev : new Set(prev).add(url)));
   const [filteredDocuments, setFilteredDocuments] = useState<Advertisement[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<Advertisement | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -18,7 +22,11 @@ const AdvancedDocumentsList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [filter, setFilter] = useState({
-    status: 'all',
+    // هذه شاشة طابور المراجعة لا قائمة عامة: تفتح على ما ينتظر
+    // قرارًا. كان الافتراضي «الكل» فتُخلط الإعلانات المعتمدة
+    // والمرفوضة والمحلولة بما يحتاج مراجعة، ويبحث المشرف عن عمله
+    // وسط ما فرغ منه
+    status: 'pending',
     governorate: 'all',
     sort: 'newest',
     search: ''
@@ -435,7 +443,9 @@ const AdvancedDocumentsList: React.FC = () => {
   return (
     <div className="advanced-documents-container">
       <div className="documents-header">
-        <h1>إدارة الإعلانات</h1>
+        {/* كان العنوان «إدارة الإعلانات» — نفس عنوان قسم «جميع
+            الإعلانات» تمامًا، فلا يعرف المشرف في أي شاشة هو */}
+        <h1>الإعلانات للمراجعة</h1>
         <button 
           className="refresh-button" 
           onClick={handleRefresh}
@@ -526,10 +536,13 @@ const AdvancedDocumentsList: React.FC = () => {
           <table className="documents-table">
             <thead>
               <tr>
-                <th>النوع</th>
-                <th>الاسم</th>
-                <th>المحافظة</th>
-                <th>التاريخ</th>
+                {/* الصورة أولًا: قرار المراجعة كثيرًا ما يتوقّف عليها
+                    (هل هي فعلًا صورة مستمسك؟) وكانت تتطلّب فتح
+                    التفاصيل لكل صفّ على حدة */}
+                <th className="col-thumb" aria-label="الصورة"></th>
+                <th>البلاغ</th>
+                <th>المستمسك</th>
+                <th>المحافظة والتاريخ</th>
                 <th>الحالة</th>
                 <th>الإجراءات</th>
               </tr>
@@ -537,12 +550,54 @@ const AdvancedDocumentsList: React.FC = () => {
             <tbody>
               {filteredDocuments.map((doc, index) => (
                 <tr key={doc.id ?? `row-${index}`} className={selectedDocument?.id === doc.id ? 'selected' : ''}>
+                  <td className="col-thumb">
+                    {doc.images && doc.images.length > 0 && !brokenImages.has(doc.images[0]) ? (
+                      <img
+                        src={doc.images[0]}
+                        alt=""
+                        className="row-thumb"
+                        loading="lazy"
+                        onError={() => doc.images && markImageBroken(doc.images[0])}
+                      />
+                    ) : (
+                      <span className="row-thumb is-empty" title="لا توجد صورة">
+                        <i className="fas fa-image" />
+                      </span>
+                    )}
+                  </td>
+
+                  {/* مفقود أم موجود: أهمّ تصنيف في الإعلان ولم يكن
+                      معروضًا في هذا الجدول إطلاقًا، فيراجع المشرف
+                      طابورًا كاملًا دون أن يعرف طبيعة كل بلاغ */}
+                  <td>
+                    {doc.type === 'lost' && (
+                      <span className="type-pill is-lost"><i className="fas fa-search" /> مفقود</span>
+                    )}
+                    {doc.type === 'found' && (
+                      <span className="type-pill is-found"><i className="fas fa-hand-paper" /> موجود</span>
+                    )}
+                    {!doc.type && <span className="cell-empty">—</span>}
+                  </td>
+
                   {/* القاموس موجود في translationUtils لكنه لم يكن يُستخدم هنا،
                       فتظهر قيم التعداد الخام (passport / baghdad) للمشرف */}
-                  <td>{doc.documentType ? translateDocumentType(doc.documentType) : 'غير معروف'}</td>
-                  <td>{doc.name || 'غير معروف'}</td>
-                  <td>{doc.location ? translateCity(doc.location) : 'غير معروف'}</td>
-                  <td>{doc.date || 'غير معروف'}</td>
+                  {/* نوع المستمسك ورقمه واسم صاحبه في خلية واحدة:
+                      ثلاثة أعمدة منفصلة كانت تدفع عمود الإجراءات خارج
+                      عرض الجدول فيُقصّ، وهي تُقرأ ككتلة واحدة أصلًا */}
+                  <td className="cell-doc">
+                    <div className="doc-type">{doc.documentType ? translateDocumentType(doc.documentType) : '—'}</div>
+                    {doc.itemNumber && (
+                      <div className="doc-number" dir="ltr" title="رقم المستمسك">{doc.itemNumber}</div>
+                    )}
+                    <div className="doc-owner">
+                      {doc.name || <span className="cell-empty">بلا اسم</span>}
+                    </div>
+                  </td>
+
+                  <td className="cell-meta">
+                    <div>{doc.location ? translateCity(doc.location) : <span className="cell-empty">—</span>}</div>
+                    <div className="meta-date">{doc.date || <span className="cell-empty">—</span>}</div>
+                  </td>
                   <td>
                     <span className={`status-badge status-${doc.status || 'unknown'}`}>
                       {doc.status === 'pending' && 'قيد الانتظار'}

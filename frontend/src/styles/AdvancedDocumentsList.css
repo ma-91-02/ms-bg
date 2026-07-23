@@ -539,3 +539,102 @@ button:disabled {
 .documents-table td:last-child {
   min-width: 165px;
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   جدول المراجعة — أعمدة القرار
+
+   كان الجدول يعرض «جواز سفر» ستّ مرّات متطابقة دون أن يميّز بلاغ
+   الفقدان من بلاغ العثور، ودون رقم المستمسك ولا صورته — وهي
+   الحقول الثلاثة التي يقوم عليها قرار المراجعة. الصورة تحديدًا
+   كانت تتطلّب فتح التفاصيل لكل صفّ على حدة.
+
+   كل المحدِّدات مقيَّدة بـ `.documents-table`: أسماء مثل `type-pill`
+   عامة وملفّات اللوحة تُحمَّل معًا.
+   ══════════════════════════════════════════════════════════════ */
+
+.documents-table .col-thumb {
+  width: 54px;
+  padding-inline-end: 0;
+}
+
+.documents-table .row-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
+  background: #f1f2f5;
+}
+
+.documents-table .row-thumb.is-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #b9bfcc;
+  font-size: 15px;
+}
+
+/* ── شارة نوع البلاغ ── */
+.documents-table .type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.documents-table .type-pill.is-lost {
+  background: #fdecea;
+  color: #c0392b;
+}
+
+.documents-table .type-pill.is-found {
+  background: #e8f5e9;
+  color: #1e7e34;
+}
+
+/* ── نوع المستمسك ورقمه في خلية واحدة ── */
+.documents-table .doc-type {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.documents-table .doc-number {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+/* القيمة الغائبة تُميَّز فلا تُقرأ كبيانات */
+.documents-table .cell-empty {
+  color: #aeb3c0;
+}
+
+/* ── شارة الحالة ── */
+/* كانت «قيد الانتظار» تنكسر على سطرين فيتفاوت ارتفاع الصفوف */
+.documents-table .status-badge {
+  white-space: nowrap;
+}
+
+
+/* الخلايا المدموجة */
+.documents-table .cell-doc .doc-owner {
+  margin-top: 3px;
+  font-size: 13px;
+  color: #4a5568;
+}
+
+.documents-table .cell-meta {
+  white-space: nowrap;
+}
+
+.documents-table .cell-meta .meta-date {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #79808f;
+}
