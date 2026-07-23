@@ -1,33 +1,57 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import helmet from 'helmet';
-import mobileAuthRoutes from './routes/mobile/authRoutes';
-import adminAuthRoutes from './routes/admin/authRoutes';
-import adRoutes from './routes/mobile/adRoutes';
+import path from 'path';
+import router from './routes';
+import errorHandler from './middleware/common/errorHandler';
+import { setupSecurityMiddleware } from './middleware/common/securityMiddleware';
 
-// إنشاء تطبيق Express
+/**
+ * بناء تطبيق Express.
+ *
+ * كان هذا الملف يسجّل بعض المسارات، ثم يستورده `index.ts` ويسجّل عليه
+ * `router` كاملًا مرة أخرى — فينتهي الأمر بـ `express.json()` و`cors()`
+ * مسجَّلين مرتين، و`/api/mobile/auth` مسجَّلًا مرتين بمعالجَين مختلفين.
+ * كل التركيب صار هنا في مكان واحد، و`index.ts` صار للإقلاع فقط.
+ */
 const app = express();
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cors());
-app.use(helmet());
+// CORS بقائمة نطاقات محددة بدل السماح للجميع
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 
-// Morgan logger only in development
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // السماح للطلبات بلا origin (تطبيق الجوال، أدوات الاختبار)
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('غير مسموح بواسطة CORS'));
+    },
+    credentials: true,
+  })
+);
+
+setupSecurityMiddleware(app);
+
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// تسجيل مسارات API للجوال مع تتبع
-console.log('🔍 Registering mobile routes...');
-app.use('/api/mobile/auth', mobileAuthRoutes);
-app.use('/api/mobile/ads', adRoutes);
-console.log('✅ Mobile routes registered');
+// الملفات المرفوعة
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// تسجيل مسارات API للمشرف
-app.use('/api/login', adminAuthRoutes);
+// فحص الصحة — يفيد في مراقبة الحاويات
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// تصدير التطبيق
-export default app; 
+// كل المسارات مسجَّلة في مكان واحد
+app.use(router);
+
+// معالج الأخطاء يأتي أخيرًا دائمًا
+app.use(errorHandler);
+
+export default app;

@@ -1,5 +1,3 @@
-import { Document } from 'mongoose';
-
 // أنواع الإعلانات
 export enum AdvertisementType {
   LOST = 'lost',

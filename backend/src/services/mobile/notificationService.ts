@@ -1,142 +1,106 @@
-import mongoose from 'mongoose';
-import Notification from '../../models/mobile/Notification';
+import prisma from '../../config/prisma';
 import { NotificationType } from '../../types/mobile/notifications';
 
 /**
- * نموذج الإشعار - نتجنب استخدام النموذج مباشرة لإزالة الاعتماديات
+ * خدمة الإشعارات.
+ *
+ * علّة أُصلحت هنا: كانت `createNotification` تكتب في قاعدة البيانات بينما
+ * تقرأ `getUserNotifications` و`markNotificationAsRead` و`markAllNotificationsAsRead`
+ * من مصفوفة `notifications` في الذاكرة لا يُضاف إليها شيء أبدًا. النتيجة:
+ * قائمة إشعارات فارغة دائمًا، و«تعليم كمقروء» يرمي «الإشعار غير موجود» دومًا.
+ * كل العمليات الآن على قاعدة البيانات نفسها.
  */
-interface Notification {
-  userId: string;
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  data?: any;
-  read: boolean;
-  createdAt: Date;
-}
 
-/**
- * واجهة إنشاء إشعار جديد
- */
 export interface ICreateNotification {
-  userId: mongoose.Types.ObjectId | string;
+  userId: string;
   title: string;
   body: string;
   type: NotificationType;
-  referenceId?: mongoose.Types.ObjectId | string;
+  referenceId?: string;
   data?: Record<string, any>;
 }
 
-// مخزن مؤقت للإشعارات (في الذاكرة)
-const notifications: Notification[] = [];
+export const createNotification = async (params: ICreateNotification) => {
+  const { userId, title, body, type, referenceId, data } = params;
 
-/**
- * إنشاء إشعار جديد
- */
-export const createNotification = async (params: ICreateNotification): Promise<any> => {
-  try {
-    const { userId, title, body, type, referenceId, data } = params;
-    
-    // إنشاء إشعار جديد
-    const notification = await Notification.create({
+  const notification = await prisma.notification.create({
+    data: { userId, title, body, type, referenceId, data: data ?? undefined },
+  });
+
+  console.log(`🔔 إشعار جديد: ${title} للمستخدم ${userId}`);
+  return notification;
+};
+
+/** إنشاء إشعارات متعددة دفعةً واحدة — للمطابقات الجماعية */
+export const createNotifications = (items: ICreateNotification[]) =>
+  prisma.notification.createMany({
+    data: items.map(({ userId, title, body, type, referenceId, data }) => ({
       userId,
       title,
       body,
       type,
       referenceId,
-      data,
-      read: false
-    });
-    
-    console.log(`🔔 تم إنشاء إشعار جديد: ${title} للمستخدم: ${userId}`);
-    
-    return notification;
-  } catch (error) {
-    console.error('خطأ في إنشاء إشعار:', error);
-    throw error;
-  }
+      data: data ?? undefined,
+    })),
+  });
+
+export const getUserNotifications = async (
+  userId: string,
+  options: { limit?: number; page?: number } = {}
+) => {
+  const page = Math.max(1, options.page ?? 1);
+  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
+
+  const [total, unreadCount, notifications] = await prisma.$transaction([
+    prisma.notification.count({ where: { userId } }),
+    prisma.notification.count({ where: { userId, isRead: false } }),
+    prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    notifications,
+    pagination: { total, page, limit, pages: Math.ceil(total / limit) },
+    unreadCount,
+  };
 };
 
 /**
- * الحصول على إشعارات المستخدم
- */
-export const getUserNotifications = async (userId: string, options = { limit: 50, page: 1 }) => {
-  try {
-    const { limit, page } = options;
-    const skip = (page - 1) * limit;
-    
-    // استخدام المخزن المؤقت بدلاً من قاعدة البيانات
-    const userNotifications = notifications
-      .filter(n => n.userId.toString() === userId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    
-    const total = userNotifications.length;
-    const paginatedNotifications = userNotifications.slice(skip, skip + limit);
-    const unreadCount = userNotifications.filter(n => !n.read).length;
-    
-    return {
-      notifications: paginatedNotifications,
-      pagination: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit)
-      },
-      unreadCount
-    };
-  } catch (error) {
-    console.error('خطأ في جلب إشعارات المستخدم:', error);
-    throw error;
-  }
-};
-
-/**
- * وضع علامة "مقروء" على إشعار معين
+ * تعليم إشعار كمقروء.
+ * شرط `userId` جزء من الاستعلام لا فحصًا بعده — فلا يستطيع مستخدم
+ * تعديل إشعار غيره حتى لو عرف معرّفه.
  */
 export const markNotificationAsRead = async (notificationId: string, userId: string) => {
-  try {
-    const existingNotification = notifications.find(
-      n => n.userId.toString() === userId && notificationId === n.id
-    );
-    
-    if (!existingNotification) {
-      throw new Error('الإشعار غير موجود أو ليست لديك صلاحية الوصول إليه');
-    }
-    
-    existingNotification.read = true;
-    existingNotification.createdAt = new Date();
-    
-    return existingNotification;
-  } catch (error) {
-    console.error('خطأ في وضع علامة مقروء على الإشعار:', error);
-    throw error;
+  const result = await prisma.notification.updateMany({
+    where: { id: notificationId, userId },
+    data: { isRead: true },
+  });
+
+  if (result.count === 0) {
+    throw new Error('الإشعار غير موجود أو ليست لديك صلاحية الوصول إليه');
   }
+
+  return prisma.notification.findUnique({ where: { id: notificationId } });
 };
 
-/**
- * وضع علامة "مقروء" على جميع إشعارات المستخدم
- */
 export const markAllNotificationsAsRead = async (userId: string) => {
-  try {
-    notifications
-      .filter(n => n.userId.toString() === userId)
-      .forEach(n => {
-        n.read = true;
-        n.createdAt = new Date();
-      });
-    
-    return { success: true };
-  } catch (error) {
-    console.error('خطأ في وضع علامة مقروء على جميع الإشعارات:', error);
-    throw error;
-  }
+  const result = await prisma.notification.updateMany({
+    where: { userId, isRead: false },
+    data: { isRead: true },
+  });
+
+  return { success: true, updated: result.count };
 };
 
 export default {
   createNotification,
+  createNotifications,
   getUserNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
-  NotificationType
-}; 
+  NotificationType,
+};

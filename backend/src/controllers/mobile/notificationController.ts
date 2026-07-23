@@ -8,22 +8,22 @@ import { sendSuccess, sendError } from '../../utils/common/responseGenerator';
  */
 export const getUserNotifications = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user || !req.user._id) {
+    if (!req.user?.id) {
       return sendError(res, 'غير مصرح به', 401);
     }
 
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
 
-    const result = await notificationService.getUserNotifications(
-      req.user._id.toString(),
-      { page, limit }
-    );
+    const result = await notificationService.getUserNotifications(req.user.id, {
+      page,
+      limit,
+    });
 
     return sendSuccess(res, {
       notifications: result.notifications,
       pagination: result.pagination,
-      unreadCount: result.unreadCount
+      unreadCount: result.unreadCount,
     });
   } catch (error) {
     console.error('خطأ في جلب الإشعارات:', error);
@@ -36,7 +36,7 @@ export const getUserNotifications = async (req: AuthRequest, res: Response) => {
  */
 export const markAsRead = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user || !req.user._id) {
+    if (!req.user?.id) {
       return sendError(res, 'غير مصرح به', 401);
     }
 
@@ -44,11 +44,15 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
 
     const notification = await notificationService.markNotificationAsRead(
       notificationId,
-      req.user._id.toString()
+      req.user.id
     );
 
     return sendSuccess(res, notification, 'تم وضع علامة "مقروء" على الإشعار بنجاح');
-  } catch (error) {
+  } catch (error: any) {
+    // الإشعار غير موجود أو يخص مستخدمًا آخر — 404 لا 500
+    if (error?.message?.includes('غير موجود')) {
+      return sendError(res, error.message, 404);
+    }
     console.error('خطأ في وضع علامة "مقروء" على الإشعار:', error);
     return sendError(res, 'حدث خطأ أثناء تحديث حالة الإشعار', 500);
   }
@@ -59,15 +63,15 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
  */
 export const markAllAsRead = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user || !req.user._id) {
+    if (!req.user?.id) {
       return sendError(res, 'غير مصرح به', 401);
     }
 
-    await notificationService.markAllNotificationsAsRead(req.user._id.toString());
+    await notificationService.markAllNotificationsAsRead(req.user.id);
 
     return sendSuccess(res, null, 'تم وضع علامة "مقروء" على جميع الإشعارات بنجاح');
   } catch (error) {
     console.error('خطأ في وضع علامة "مقروء" على جميع الإشعارات:', error);
     return sendError(res, 'حدث خطأ أثناء تحديث حالة الإشعارات', 500);
   }
-}; 
+};

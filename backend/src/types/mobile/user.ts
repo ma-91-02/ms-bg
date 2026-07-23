@@ -1,5 +1,3 @@
-import { Document } from 'mongoose';
-
 export interface UserDTO {
   id: string;
   phoneNumber: string;

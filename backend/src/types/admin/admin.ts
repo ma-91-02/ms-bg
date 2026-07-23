@@ -1,30 +1,14 @@
-import { Document } from 'mongoose';
-import { Request } from 'express';
 import { MatchStatus } from '../../models/mobile/AdvertisementMatch';
 
 /**
- * واجهة الأدمن
+ * أنواع لوحة التحكم.
+ *
+ * `IAdmin` و`AdminAuthRequest` كانا يعرّفان هنا شكلًا يخالف ما يضعه وسيط
+ * المصادقة فعليًا في `req.admin` (وكان `role` مقيّدًا بـ 'admin' | 'super'
+ * بينما التعداد الحقيقي superadmin/admin/moderator). صارا يشيران إلى
+ * التعريف الواحد في `types/express`.
  */
-export interface IAdmin extends Document {
-  username: string;
-  password: string;
-  role: 'admin' | 'super';
-  createdAt: Date;
-  updatedAt: Date;
-  comparePassword: (password: string) => Promise<boolean>;
-}
-
-/**
- * واجهة طلب المصادقة للأدمن
- */
-export interface AdminAuthRequest extends Request {
-  admin?: {
-    _id: string;
-    id: string;
-    username: string;
-    role: string;
-  };
-}
+export type { AuthenticatedAdmin as IAdmin, AuthRequest as AdminAuthRequest } from '../express';
 
 /**
  * واجهة المطابقة
@@ -38,4 +22,4 @@ export interface IMatch {
   notificationSent: boolean;
   createdAt?: Date;
   updatedAt?: Date;
-} 
+}
