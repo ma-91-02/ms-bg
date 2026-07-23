@@ -5,18 +5,25 @@ import { uploadAdvertisementImages } from '../../services/common/fileUploadServi
 
 const router = express.Router();
 
-// مسارات عامة (بدون حماية)
+// مسارات عامة (بدون حماية).
+//
+// تصفّح الإعلانات وتفاصيلها متاح للزائر: التطبيق منصّة بلاغات
+// مفقودات، وحجب التفاصيل عن غير المسجّل يقتل الغرض — من يبحث عن
+// مستمسكه يجب أن يراه دون حساب. الحساب لا يلزم إلا للتواصل والنشر.
+//
+// كان `GET /:id` تحت `router.use(protect)` فيُرجع 401 للزائر، بينما
+// القائمة `GET /` عامة — تناقض يعرض «موجود · جواز سفر» في القائمة ثم
+// «غير مصرّح به» عند فتحه. المسار الديناميكي يأتي أخيرًا بين العامة
+// كي لا يبتلع `/constants` و`/user/...`.
 router.get('/', advertisementController.getAdvertisements);
 router.get('/constants', advertisementController.getConstants);
+router.get('/:id', advertisementController.getAdvertisementById);
 
 // مسارات محمية (تتطلب تسجيل الدخول)
 router.use(protect);
 
 // إدارة الإعلانات الشخصية
 router.get('/user/my-advertisements', advertisementController.getUserAdvertisements);
-
-// مسار التفاصيل بالمعرّف (يأتي بعد المسارات المحددة)
-router.get('/:id', advertisementController.getAdvertisementById);
 
 // إنشاء/تحديث/حذف إعلان
 // وسيط مخصّص للإعلانات يحفظ في uploads/advertisements؛ الوسيط العام
