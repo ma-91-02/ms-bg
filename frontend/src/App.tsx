@@ -37,7 +37,11 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          {/* الدخول على /admin مباشرةً — لا يطابق أي مسار أعلاه */}
+          <Route path="/admin" element={<Navigate to="/admin/login" replace />} />
           <Route path="/" element={<Navigate to="/admin/login" replace />} />
+          {/* أي مسار غير معروف داخل اللوحة يعود إلى الدخول بدل صفحة فارغة */}
+          <Route path="*" element={<Navigate to="/admin/login" replace />} />
         </Routes>
       </div>
     </Router>

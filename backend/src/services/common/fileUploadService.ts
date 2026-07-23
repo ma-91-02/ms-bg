@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
+import { ensureUploadDir } from '../../config/paths';
 
 /**
  * إنشاء خدمة رفع الملفات حسب نوع الملف والمجلد
@@ -18,14 +19,9 @@ export const createUploadMiddleware = (
   // تكوين multer لتحميل الملفات
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-      const uploadDir = path.join(__dirname, `../../../uploads/${folder}`);
-      
-      // إنشاء المجلد إذا لم يكن موجودًا
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-      
-      cb(null, uploadDir);
+      // مصدر واحد للمسار — كان محسوبًا نسبةً إلى __dirname بعمق مختلف
+      // عن بقية المواضع فتتباعد مجلدات الكتابة والقراءة
+      cb(null, ensureUploadDir(folder));
     },
     filename: (req, file, cb) => {
       const uniqueFileName = `${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;
@@ -58,14 +54,7 @@ export const uploadProfileImage = createUploadMiddleware('profiles', ['image/jpe
 // تكوين multer لتحميل الصور
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../../uploads/advertisements');
-    
-    // إنشاء المجلد إذا لم يكن موجودًا
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    
-    cb(null, uploadDir);
+    cb(null, ensureUploadDir('advertisements'));
   },
   filename: (req, file, cb) => {
     const uniqueFileName = `${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;

@@ -1,10 +1,17 @@
 # ============================================================================
-#  نشر على Coolify — Docker Compose
+#  نشر على Coolify — كل الخدمات خلف نطاق واحد
 #
-#  في Coolify: New Resource → Docker Compose → الصق هذا الملف،
-#  ثم اضبط متغيرات البيئة المذكورة أدناه في تبويب Environment Variables.
+#      example.com/          → تطبيق المستخدم (PWA)
+#      example.com/install   → صفحة شرح التثبيت
+#      example.com/admin     → لوحة التحكم
+#      example.com/api       → الخلفية
 #
-#  لا تضع أي سر في هذا الملف — كلها تأتي من متغيرات Coolify.
+#  البوابة وحدها تحمل نطاقًا عامًا؛ البقية على الشبكة الداخلية فقط.
+#  لهذا فائدة أمنية مباشرة: قاعدة البيانات والخلفية غير مكشوفتين للإنترنت.
+#  وفائدة عملية: تختفي CORS تمامًا لأن كل الطلبات من نفس الأصل.
+#
+#  المتطلّب الوحيد قبل النشر: استنساخ مستودع التطبيق بجانب هذا المستودع
+#      git clone https://github.com/ma-91-02/ms-mobile-app ../ms-mobile-app
 # ============================================================================
 
 services:
@@ -22,7 +29,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    # غير منشور على الإنترنت — الخلفية وحدها تصل إليه عبر الشبكة الداخلية
 
   backend:
     build:
@@ -43,40 +49,51 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       # يجب أن يبقى false — الخادم يرفض الإقلاع لو كان true مع NODE_ENV=production
       DEMO_MODE: 'false'
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      SERVICE_FQDN_BACKEND_3001: /
+      # يطابق وحدة التخزين أدناه — دون ضبطه يُشتق المسار من موقع الملف
+      UPLOADS_DIR: /app/uploads
+      # نطاق واحد فلا حاجة لقائمة أصول مسموحة؛ تُترك للتوافق فقط
+      CORS_ORIGINS: ${APP_URL}
     volumes:
       # الصور المرفوعة يجب أن تنجو من إعادة النشر
       - uploads:/app/uploads
 
-  frontend:
+  admin:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # يُضمَّن وقت البناء — تغييره يستلزم إعادة بناء لا إعادة تشغيل
-        REACT_APP_API_URL: ${REACT_APP_API_URL}
+        # فارغ عمدًا: نطاق واحد، فالمسار النسبي /api هو الصحيح
+        REACT_APP_API_URL: ''
     restart: unless-stopped
     depends_on:
       - backend
-    environment:
-      SERVICE_FQDN_FRONTEND_80: /
 
-  # تطبيق المستخدم (PWA) — مستودع منفصل: github.com/ma-91-02/ms-mobile-app
-  # في Coolify يُنشأ كمورد مستقل يشير إلى ذلك المستودع؛ أُدرج هنا للتوثيق
-  # ولتشغيل المنظومة كاملةً محليًا عبر:
-  #   git clone https://github.com/ma-91-02/ms-mobile-app ../ms-mobile-app
   pwa:
     build:
       context: ../ms-mobile-app
       dockerfile: Dockerfile
       args:
-        EXPO_PUBLIC_API_URL: ${EXPO_PUBLIC_API_URL}
+        # فارغ عمدًا للسبب نفسه
+        EXPO_PUBLIC_API_URL: ''
     restart: unless-stopped
     depends_on:
       - backend
+
+  # الخدمة الوحيدة المكشوفة على الإنترنت
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - admin
+      - pwa
     environment:
-      SERVICE_FQDN_PWA_80: /
+      SERVICE_FQDN_GATEWAY_80: /
+    # للتشغيل المحلي فقط — في Coolify يتولى الوكيل العكسي المنفذ
+    ports:
+      - '${GATEWAY_PORT:-8080}:80'
 
 volumes:
   pgdata:

@@ -19,7 +19,9 @@ RUN npm run build
 # ---------- التقديم ----------
 FROM nginx:alpine AS runner
 
-COPY --from=builder /app/build /usr/share/nginx/html
+# البناء يوضع تحت /admin ليطابق `homepage` — الأصول تُطلَب بالمسار
+# /admin/static/... فيجب أن توجد فعليًا هناك على القرص
+COPY --from=builder /app/build /usr/share/nginx/html/admin
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

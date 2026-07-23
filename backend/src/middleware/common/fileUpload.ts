@@ -1,4 +1,5 @@
 import multer from 'multer';
+import { ensureUploadDir } from '../../config/paths';
 import path from 'path';
 import fs from 'fs';
 import { Request } from 'express';
@@ -28,7 +29,7 @@ export const createUploadMiddleware = (options: {
     allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'],
   } = options;
 
-  createUploadDir(`uploads/${folder}`);
+  ensureUploadDir(folder);
 
   // إعداد تخزين Multer
   const storage = multer.diskStorage({
