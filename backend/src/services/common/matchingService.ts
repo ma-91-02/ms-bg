@@ -1,247 +1,243 @@
-import Advertisement, { AdvertisementType, ItemCategory } from '../../models/mobile/Advertisement';
-import AdvertisementMatch, { MatchStatus } from '../../models/mobile/AdvertisementMatch';
+import { Prisma } from '@prisma/client';
+import prisma from '../../config/prisma';
+import { AdvertisementType } from '../../models/mobile/Advertisement';
+import { MatchStatus } from '../../models/mobile/AdvertisementMatch';
 
-// وظيفة لتحديد نسبة التشابه بين نصين
-const calculateSimilarity = (str1: string, str2: string): number => {
-  if (!str1 || !str2) return 0;
-  
-  // تنظيف وتحويل النصوص لأحرف صغيرة
-  const a = str1.toLowerCase().replace(/\s+/g, ' ').trim();
-  const b = str2.toLowerCase().replace(/\s+/g, ' ').trim();
-  
-  // حساب تطابق أساسي (يمكن تحسينه لاحقاً)
-  if (a === b) return 100;
-  if (a.includes(b) || b.includes(a)) return 80;
-  
-  // حساب عدد الكلمات المشتركة
-  const wordsA = a.split(' ');
-  const wordsB = b.split(' ');
-  
-  let matchCount = 0;
-  for (const word of wordsA) {
-    if (word.length > 2 && wordsB.includes(word)) {
-      matchCount++;
-    }
-  }
-  
-  const similarity = (matchCount * 2) / (wordsA.length + wordsB.length) * 100;
-  return Math.round(similarity);
+/**
+ * محرك مطابقة الإعلانات.
+ *
+ * ما تغيّر عن نسخة Mongo — والسبب:
+ *
+ *  1. كانت تجلب كل المرشحين ثم تقارنهم نصيًا في JavaScript، وتنفّذ استعلامًا
+ *     منفصلًا لكل مرشّح للتأكد من عدم وجود مطابقة سابقة (N+1). صارت الفلترة
+ *     والتشابه النصي داخل Postgres في استعلام واحد يستخدم فهارس trigram.
+ *
+ *  2. مقارنة الأسماء كانت حرفية فتفشل أمام «أحمد/احمد» و«فاطمة/فاطمه».
+ *     صارت تمر عبر `normalize_ar()` ثم `similarity()`.
+ *
+ *  3. حماية التكرار كانت باستعلام مسبق لكل زوج ثم مسار إداري للتنظيف؛
+ *     صارت قيد `@@unique` في المخطط + `skipDuplicates`.
+ *
+ * أوزان النقاط لم تتغيّر إطلاقًا — نفس القواعد ونفس العتبات، حتى تبقى
+ * نتائج المطابقة قابلة للمقارنة مع ما أنتجه النظام سابقًا.
+ */
+
+/** أوزان حساب درجة التطابق — منقولة كما هي من النسخة السابقة */
+const WEIGHTS = {
+  GOVERNORATE: 10,
+  ITEM_NUMBER: 60,
+  OWNER_NAME: 30,
+  DESCRIPTION_STRONG: 10,
+  DESCRIPTION_PARTIAL: 5,
+} as const;
+
+/** عتبات القبول — منقولة كما هي */
+const THRESHOLDS = {
+  MIN_TOTAL_SCORE: 15,
+  NAME_STRONG: 0.8,
+  NAME_MIN: 0.3,
+  DESCRIPTION_STRONG: 0.5,
+  DESCRIPTION_PARTIAL: 0.3,
+} as const;
+
+/** صف مرشّح كما يعيده استعلام المطابقة */
+interface CandidateRow {
+  id: string;
+  governorate_match: boolean;
+  item_number_match: boolean;
+  name_similarity: number | null;
+  description_similarity: number | null;
+}
+
+/**
+ * يعثر على المرشحين ويحسب درجات التشابه داخل قاعدة البيانات.
+ *
+ * المرشّح يُقبل مبدئيًا إذا تطابق رقم المستند، أو بلغ تشابه الاسم الحد
+ * الأدنى، أو تطابقت المحافظة — أي أن الترشيح المبدئي واسع عمدًا،
+ * والترجيح النهائي يبقى في TypeScript ليظل مقروءًا وقابلًا للاختبار.
+ */
+const fetchScoredCandidates = (ad: {
+  id: string;
+  type: string;
+  category: string;
+  governorate: string;
+  ownerName: string | null;
+  itemNumber: string | null;
+  description: string;
+}): Promise<CandidateRow[]> => {
+  const searchType =
+    ad.type === AdvertisementType.LOST ? AdvertisementType.FOUND : AdvertisementType.LOST;
+
+  return prisma.$queryRaw<CandidateRow[]>`
+    SELECT
+      c.id,
+      (c.governorate = ${ad.governorate}::"Governorate") AS governorate_match,
+      (
+        ${ad.itemNumber}::text IS NOT NULL
+        AND c.item_number IS NOT NULL
+        AND (
+          replace(c.item_number, ' ', '') = replace(${ad.itemNumber}::text, ' ', '')
+          OR replace(c.item_number, ' ', '') LIKE '%' || replace(${ad.itemNumber}::text, ' ', '') || '%'
+          OR replace(${ad.itemNumber}::text, ' ', '') LIKE '%' || replace(c.item_number, ' ', '') || '%'
+        )
+      ) AS item_number_match,
+      CASE
+        WHEN ${ad.ownerName}::text IS NULL OR c.owner_name IS NULL THEN NULL
+        ELSE similarity(normalize_ar(c.owner_name), normalize_ar(${ad.ownerName}::text))
+      END AS name_similarity,
+      similarity(normalize_ar(c.description), normalize_ar(${ad.description})) AS description_similarity
+    FROM advertisements c
+    WHERE c.id <> ${ad.id}
+      AND c.type = ${searchType}::"AdvertisementType"
+      AND c.category = ${ad.category}::"ItemCategory"
+      AND c.is_approved = true
+      AND c.is_resolved = false
+      -- استبعاد الأزواج المسجَّلة مسبقًا في اتجاهيها
+      AND NOT EXISTS (
+        SELECT 1 FROM advertisement_matches m
+        WHERE (m.lost_advertisement_id = c.id AND m.found_advertisement_id = ${ad.id})
+           OR (m.lost_advertisement_id = ${ad.id} AND m.found_advertisement_id = c.id)
+      )
+    ORDER BY
+      COALESCE(similarity(normalize_ar(c.owner_name), normalize_ar(COALESCE(${ad.ownerName}::text, ''))), 0) DESC
+    LIMIT 200
+  `;
 };
 
-// وظيفة لمطابقة رقم المستند بشكل مرن
-const compareItemNumbers = (num1: string, num2: string): boolean => {
-  if (!num1 || !num2) return false;
-  
-  // إزالة المسافات وتنظيف الأرقام
-  const cleanNum1 = num1.replace(/\s+/g, '').trim();
-  const cleanNum2 = num2.replace(/\s+/g, '').trim();
-  
-  // تحقق من التطابق التام
-  if (cleanNum1 === cleanNum2) return true;
-  
-  // تحقق من التطابق الجزئي (إذا كان أحد الأرقام جزءًا من الآخر)
-  if (cleanNum1.includes(cleanNum2) || cleanNum2.includes(cleanNum1)) return true;
-  
-  return false;
+/** يحسب الدرجة النهائية والحقول المتطابقة — نفس منطق النسخة السابقة */
+const scoreCandidate = (row: CandidateRow): { score: number; fields: string[] } => {
+  const fields: string[] = [];
+  let score = 0;
+
+  if (row.governorate_match) {
+    fields.push('governorate');
+    score += WEIGHTS.GOVERNORATE;
+  }
+
+  if (row.item_number_match) {
+    fields.push('itemNumber');
+    score += WEIGHTS.ITEM_NUMBER;
+  }
+
+  const nameSim = row.name_similarity ?? 0;
+  if (nameSim >= THRESHOLDS.NAME_STRONG) {
+    fields.push('ownerName');
+    score += WEIGHTS.OWNER_NAME;
+  } else if (nameSim >= THRESHOLDS.NAME_MIN) {
+    fields.push('ownerName_partial');
+    score += Math.round(WEIGHTS.OWNER_NAME * nameSim);
+  }
+
+  const descSim = row.description_similarity ?? 0;
+  if (descSim > THRESHOLDS.DESCRIPTION_STRONG) {
+    fields.push('description');
+    score += WEIGHTS.DESCRIPTION_STRONG;
+  } else if (descSim > THRESHOLDS.DESCRIPTION_PARTIAL) {
+    fields.push('description_partial');
+    score += WEIGHTS.DESCRIPTION_PARTIAL;
+  }
+
+  return { score: Math.min(score, 100), fields };
 };
 
-// وظيفة لمطابقة الأسماء
-const compareNames = (name1: string, name2: string): { isMatch: boolean, score: number } => {
-  if (!name1 || !name2) return { isMatch: false, score: 0 };
-  
-  // تنظيف الأسماء
-  const cleanName1 = name1.toLowerCase().replace(/\s+/g, ' ').trim();
-  const cleanName2 = name2.toLowerCase().replace(/\s+/g, ' ').trim();
-  
-  // تحقق من التطابق التام
-  if (cleanName1 === cleanName2) return { isMatch: true, score: 100 };
-  
-  // تحقق من الاحتواء
-  if (cleanName1.includes(cleanName2) || cleanName2.includes(cleanName1)) {
-    return { isMatch: true, score: 80 };
-  }
-  
-  // تقسيم الاسماء إلى كلمات
-  const words1 = cleanName1.split(' ');
-  const words2 = cleanName2.split(' ');
-  
-  // عدد الكلمات المشتركة
-  let matchingWords = 0;
-  for (const word1 of words1) {
-    if (word1.length < 3) continue; // تجاهل الكلمات القصيرة جدًا
-    
-    for (const word2 of words2) {
-      if (word2.length < 3) continue;
-      
-      if (word1 === word2) {
-        matchingWords++;
-        break;
-      }
-    }
-  }
-  
-  // إذا وجدت على الأقل كلمة مشتركة هامة
-  if (matchingWords > 0) {
-    const matchRatio = (matchingWords * 2) / (words1.length + words2.length);
-    const score = Math.round(matchRatio * 100);
-    return { isMatch: score > 30, score };
-  }
-  
-  return { isMatch: false, score: 0 };
-};
-
-// البحث عن تطابق محتمل بين إعلان جديد والإعلانات الموجودة
-export const findPotentialMatches = async (advertisementId: string): Promise<void> => {
+/**
+ * البحث عن مطابقات محتملة لإعلان وحفظها.
+ * يعيد عدد المطابقات الجديدة المُنشأة.
+ */
+export const findPotentialMatches = async (advertisementId: string): Promise<number> => {
   try {
-    console.log(`🔍 بدء البحث عن تطابقات للإعلان: ${advertisementId}`);
-    
-    // الحصول على معلومات الإعلان الجديد
-    const advertisement = await Advertisement.findById(advertisementId);
-    
+    const advertisement = await prisma.advertisement.findUnique({
+      where: { id: advertisementId },
+      select: {
+        id: true,
+        type: true,
+        category: true,
+        governorate: true,
+        ownerName: true,
+        itemNumber: true,
+        description: true,
+        isApproved: true,
+      },
+    });
+
     if (!advertisement) {
       console.error(`❌ الإعلان غير موجود: ${advertisementId}`);
-      return;
+      return 0;
     }
-    
-    // تأكد من أن الإعلان معتمد
+
     if (!advertisement.isApproved) {
       console.log(`⚠️ تخطي الإعلان غير المعتمد: ${advertisementId}`);
-      return;
+      return 0;
     }
-    
-    // تحديد نوع البحث (إذا كان مفقود، نبحث في الموجودات والعكس)
-    const searchType = advertisement.type === AdvertisementType.LOST 
-      ? AdvertisementType.FOUND 
-      : AdvertisementType.LOST;
-    
-    console.log(`📋 البحث عن إعلانات من نوع ${searchType} متوافقة مع ${advertisement.type} (${advertisement.category})`);
-    
-    // 1. البحث عن إعلانات من نفس الفئة بغض النظر عن المحافظة
-    const matchCandidates = await Advertisement.find({
-      _id: { $ne: advertisementId },
-      type: searchType,
-      category: advertisement.category,
-      isApproved: true,    // فقط الإعلانات المعتمدة
-      isResolved: false    // فقط الإعلانات غير المحلولة
+
+    const candidates = await fetchScoredCandidates(advertisement);
+    console.log(`✅ ${candidates.length} مرشح محتمل للإعلان ${advertisementId}`);
+
+    const isLost = advertisement.type === AdvertisementType.LOST;
+
+    const newMatches = candidates
+      .map((row) => ({ row, ...scoreCandidate(row) }))
+      .filter(
+        ({ score, fields }) =>
+          score >= THRESHOLDS.MIN_TOTAL_SCORE ||
+          fields.includes('itemNumber') ||
+          fields.includes('ownerName')
+      )
+      .map(({ row, score, fields }) => ({
+        lostAdvertisementId: isLost ? advertisement.id : row.id,
+        foundAdvertisementId: isLost ? row.id : advertisement.id,
+        matchScore: score,
+        matchingFields: fields,
+        status: MatchStatus.PENDING,
+        notificationSent: false,
+      }));
+
+    if (newMatches.length === 0) {
+      console.log(`😞 لا مطابقات جديدة للإعلان ${advertisementId}`);
+      return 0;
+    }
+
+    // skipDuplicates يعتمد على قيد @@unique — لا حاجة لفحص مسبق لكل زوج
+    const result = await prisma.advertisementMatch.createMany({
+      data: newMatches,
+      skipDuplicates: true,
     });
-    
-    console.log(`✅ تم العثور على ${matchCandidates.length} مرشح محتمل للتطابق مع الإعلان ${advertisementId}`);
-    
-    // تخزين المطابقات الجديدة
-    const newMatches: Array<{
-      lostAdvertisementId: string;
-      foundAdvertisementId: string;
-      matchScore: number;
-      matchingFields: string[];
-      status: MatchStatus;
-      notificationSent: boolean;
-    }> = [];
-    
-    // لكل مرشح، قم بحساب درجة التطابق
-    for (const candidate of matchCandidates) {
-      // تحديد أي من الإعلانين هو مفقود وأيهما موجود
-      const lostAdvertisementId = searchType === AdvertisementType.FOUND 
-        ? advertisement._id?.toString() || String(advertisement._id)
-        : candidate._id?.toString() || String(candidate._id);
-      
-      const foundAdvertisementId = searchType === AdvertisementType.FOUND 
-        ? candidate._id?.toString() || String(candidate._id)
-        : advertisement._id?.toString() || String(advertisement._id);
-      
-      // التحقق من عدم وجود مطابقة مسجلة بالفعل
-      const existingMatch = await AdvertisementMatch.findOne({
-        $or: [
-          { lostAdvertisementId, foundAdvertisementId },
-          { lostAdvertisementId: foundAdvertisementId, foundAdvertisementId: lostAdvertisementId }
-        ]
-      });
-      
-      if (existingMatch) {
-        console.log(`⚠️ تجاهل مطابقة موجودة بالفعل بين ${lostAdvertisementId} و ${foundAdvertisementId}`);
-        continue;
-      }
-      
-      // حساب درجات التشابه لمختلف الحقول
-      const matchingFields: string[] = [];
-      let totalScore = 0;
-      
-      // 1. فحص تطابق المحافظة (نعطي وزن منخفض)
-      if (advertisement.governorate === candidate.governorate) {
-        matchingFields.push('governorate');
-        totalScore += 10; // وزن منخفض للمحافظة
-      }
-      
-      // 2. فحص تطابق رقم المستند (إذا كان موجوداً) - هذا مهم جداً
-      if (advertisement.itemNumber && candidate.itemNumber) {
-        if (compareItemNumbers(advertisement.itemNumber, candidate.itemNumber)) {
-          matchingFields.push('itemNumber');
-          totalScore += 60; // رقم المستند مهم جداً - وزن أعلى
-        }
-      }
-      
-      // 3. فحص تطابق اسم المالك (إذا كان موجوداً) - مهم أيضاً
-      if (advertisement.ownerName && candidate.ownerName) {
-        const nameComparisonResult = compareNames(advertisement.ownerName, candidate.ownerName);
-        if (nameComparisonResult.isMatch) {
-          if (nameComparisonResult.score >= 80) {
-            matchingFields.push('ownerName');
-            totalScore += 30; // تطابق عالي في الاسم - وزن كامل
-          } else {
-            matchingFields.push('ownerName_partial');
-            totalScore += Math.round(30 * (nameComparisonResult.score / 100)); // وزن جزئي حسب درجة التطابق
-          }
-        }
-      }
-      
-      // 4. فحص تطابق الوصف
-      if (advertisement.description && candidate.description) {
-        const descriptionSimilarity = calculateSimilarity(advertisement.description, candidate.description);
-        if (descriptionSimilarity > 50) {
-          matchingFields.push('description');
-          totalScore += 10; // الوصف له أهمية أقل - وزن أقل
-        } else if (descriptionSimilarity > 30) {
-          matchingFields.push('description_partial');
-          totalScore += 5; // تطابق جزئي في الوصف
-        }
-      }
-      
-      // قواعد خاصة: إذا كان هناك تطابق في رقم المستند أو الاسم، نعتبرها مطابقة مهمة
-      const hasStrongMatch = matchingFields.includes('itemNumber') || matchingFields.includes('ownerName');
-      
-      // إذا كان هناك تطابق كافي أو تطابق قوي، أضف إلى جدول المطابقات
-      if (totalScore >= 15 || hasStrongMatch) {
-        console.log(`⭐ مطابقة جديدة بين ${lostAdvertisementId} و ${foundAdvertisementId} (${totalScore}%)`);
-        console.log(`📝 حقول التطابق: ${matchingFields.join(', ')}`);
-        
-        // إضافة إلى مصفوفة المطابقات الجديدة
-        newMatches.push({
-          lostAdvertisementId,
-          foundAdvertisementId,
-          matchScore: totalScore,
-          matchingFields,
-          status: MatchStatus.PENDING,
-          notificationSent: false
-        });
-      }
-    }
-    
-    // حفظ جميع المطابقات الجديدة دفعة واحدة
-    if (newMatches.length > 0) {
-      await AdvertisementMatch.insertMany(newMatches);
-      console.log(`✨ تم حفظ ${newMatches.length} مطابقة جديدة في قاعدة البيانات`);
-    } else {
-      console.log(`😞 لم يتم العثور على مطابقات جديدة للإعلان ${advertisementId}`);
-    }
+
+    console.log(`✨ حُفظت ${result.count} مطابقة جديدة للإعلان ${advertisementId}`);
+    return result.count;
   } catch (error) {
     console.error('❌ خطأ في البحث عن تطابقات محتملة:', error);
+    return 0;
   }
 };
 
-// استدعاء وظيفة البحث عن تطابقات بعد إنشاء أو تحديث إعلان
-export const checkForMatches = async (advertisementId: string): Promise<void> => {
-  setTimeout(() => {
-    findPotentialMatches(advertisementId).catch(err => {
-      console.error('خطأ في جدولة البحث عن تطابقات:', err);
-    });
-  }, 1000); // تأخير بسيط لضمان حفظ الإعلان في قاعدة البيانات
-}; 
+/**
+ * تشغيل المطابقة عقب إنشاء أو اعتماد إعلان.
+ *
+ * النسخة السابقة كانت تؤخّر التنفيذ ثانية كاملة عبر setTimeout «لضمان حفظ
+ * الإعلان». هذا لم يعد لازمًا: كتابة Prisma تُنتظر فعليًا قبل الاستدعاء،
+ * فالإعلان موجود ومُثبَّت في قاعدة البيانات حين تبدأ المطابقة.
+ */
+export const checkForMatches = (advertisementId: string): void => {
+  void findPotentialMatches(advertisementId).catch((err) => {
+    console.error('خطأ في جدولة البحث عن تطابقات:', err);
+  });
+};
+
+/** تشغيل المطابقة على كل الإعلانات المعتمدة غير المحلولة — يستخدمه مسار الإدارة */
+export const runMatchingForAll = async (): Promise<number> => {
+  const ads = await prisma.advertisement.findMany({
+    where: { isApproved: true, isResolved: false },
+    select: { id: true },
+  });
+
+  let total = 0;
+  for (const ad of ads) {
+    total += await findPotentialMatches(ad.id);
+  }
+
+  console.log(`✨ إجمالي المطابقات الجديدة: ${total} من ${ads.length} إعلان`);
+  return total;
+};
+
+export default { findPotentialMatches, checkForMatches, runMatchingForAll };

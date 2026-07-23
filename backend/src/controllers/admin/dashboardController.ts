@@ -1,87 +1,115 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../types/express';
-import User from '../../models/mobile/User';
-import Advertisement from '../../models/mobile/Advertisement';
-import AdvertisementMatch from '../../models/mobile/AdvertisementMatch';
-import ContactRequest from '../../models/mobile/ContactRequest';
+import prisma from '../../config/prisma';
 
-// الحصول على إحصائيات للوحة التحكم
+/**
+ * إحصائيات لوحة التحكم.
+ *
+ * كانت 15 عملية عدّ متسلسلة، كلٌّ منها ذهاب وإياب مستقل إلى قاعدة البيانات
+ * (`await` داخل حرفيّ كائن ينفَّذ تتابعًا لا توازيًا). صارت معاملة واحدة
+ * تُنفَّذ دفعةً واحدة.
+ */
 export const getDashboardStats = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.admin) {
       return res.status(401).json({
         success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
+        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف',
       });
     }
 
-    // إحصائيات المستخدمين
-    const usersCount = await User.countDocuments();
-    
-    // إحصائيات الإعلانات
-    const adsStats = {
-      total: await Advertisement.countDocuments(),
-      pending: await Advertisement.countDocuments({ isApproved: false }),
-      approved: await Advertisement.countDocuments({ isApproved: true, isResolved: false }),
-      resolved: await Advertisement.countDocuments({ isResolved: true }),
-      lost: await Advertisement.countDocuments({ type: 'lost' }),
-      found: await Advertisement.countDocuments({ type: 'found' })
-    };
-    
-    // إحصائيات المطابقات
-    const matchesStats = {
-      total: await AdvertisementMatch.countDocuments(),
-      pending: await AdvertisementMatch.countDocuments({ status: 'pending' }),
-      approved: await AdvertisementMatch.countDocuments({ status: 'approved' }),
-      rejected: await AdvertisementMatch.countDocuments({ status: 'rejected' })
-    };
-    
-    // إحصائيات طلبات التواصل
-    const contactRequestsStats = {
-      total: await ContactRequest.countDocuments(),
-      pending: await ContactRequest.countDocuments({ status: 'pending' }),
-      approved: await ContactRequest.countDocuments({ status: 'approved' }),
-      rejected: await ContactRequest.countDocuments({ status: 'rejected' })
-    };
-    
-    // أحدث الإعلانات بانتظار الموافقة
-    const latestPendingAds = await Advertisement.find({ isApproved: false })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .populate('userId', 'fullName phoneNumber');
-    
-    // أحدث المطابقات المحتملة
-    const latestMatches = await AdvertisementMatch.find({ status: 'pending' })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .populate({
-        path: 'lostAdvertisementId',
-        select: 'category ownerName itemNumber',
-        populate: { path: 'userId', select: 'fullName' }
-      })
-      .populate({
-        path: 'foundAdvertisementId',
-        select: 'category ownerName itemNumber',
-        populate: { path: 'userId', select: 'fullName' }
-      });
+    const adSelect = {
+      id: true,
+      category: true,
+      ownerName: true,
+      itemNumber: true,
+      user: { select: { fullName: true } },
+    } as const;
+
+    const [
+      usersCount,
+      adsTotal,
+      adsPending,
+      adsApproved,
+      adsResolved,
+      adsLost,
+      adsFound,
+      matchesTotal,
+      matchesPending,
+      matchesApproved,
+      matchesRejected,
+      contactsTotal,
+      contactsPending,
+      contactsApproved,
+      contactsRejected,
+      latestPendingAds,
+      latestMatches,
+    ] = await prisma.$transaction([
+      prisma.user.count(),
+      prisma.advertisement.count(),
+      prisma.advertisement.count({ where: { isApproved: false } }),
+      prisma.advertisement.count({ where: { isApproved: true, isResolved: false } }),
+      prisma.advertisement.count({ where: { isResolved: true } }),
+      prisma.advertisement.count({ where: { type: 'lost' } }),
+      prisma.advertisement.count({ where: { type: 'found' } }),
+      prisma.advertisementMatch.count(),
+      prisma.advertisementMatch.count({ where: { status: 'pending' } }),
+      prisma.advertisementMatch.count({ where: { status: 'approved' } }),
+      prisma.advertisementMatch.count({ where: { status: 'rejected' } }),
+      prisma.contactRequest.count(),
+      prisma.contactRequest.count({ where: { status: 'pending' } }),
+      prisma.contactRequest.count({ where: { status: 'approved' } }),
+      prisma.contactRequest.count({ where: { status: 'rejected' } }),
+      prisma.advertisement.findMany({
+        where: { isApproved: false },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: { user: { select: { fullName: true, phoneNumber: true } } },
+      }),
+      prisma.advertisementMatch.findMany({
+        where: { status: 'pending' },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          lostAdvertisement: { select: adSelect },
+          foundAdvertisement: { select: adSelect },
+        },
+      }),
+    ]);
 
     return res.status(200).json({
       success: true,
       data: {
         usersCount,
-        ads: adsStats,
-        matches: matchesStats,
-        contactRequests: contactRequestsStats,
+        ads: {
+          total: adsTotal,
+          pending: adsPending,
+          approved: adsApproved,
+          resolved: adsResolved,
+          lost: adsLost,
+          found: adsFound,
+        },
+        matches: {
+          total: matchesTotal,
+          pending: matchesPending,
+          approved: matchesApproved,
+          rejected: matchesRejected,
+        },
+        contactRequests: {
+          total: contactsTotal,
+          pending: contactsPending,
+          approved: contactsApproved,
+          rejected: contactsRejected,
+        },
         latestPendingAds,
-        latestMatches
-      }
+        latestMatches,
+      },
     });
   } catch (error: any) {
     console.error('خطأ في الحصول على إحصائيات لوحة التحكم:', error);
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ في الخادم',
-      error: error.message
     });
   }
-}; 
+};

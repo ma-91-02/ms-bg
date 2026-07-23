@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ms-bg-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-msbg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-msbg_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ms_main_db}
+      # ترتيب فرز يتعامل مع العربية بشكل صحيح
+      LANG: ar_IQ.UTF-8
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - ms_bg_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-msbg} -d ${POSTGRES_DB:-ms_main_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ms_bg_pgdata:

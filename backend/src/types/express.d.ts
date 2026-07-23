@@ -1,35 +1,25 @@
-import { Document } from 'mongoose';
-import { Request, Response } from 'express';
+import { Request } from 'express';
+import type { User, Admin } from '@prisma/client';
+
+/** المستخدم المرفق بالطلب — بلا كلمة المرور */
+export type AuthenticatedUser = Omit<User, 'password'>;
+
+/** المشرف المرفق بالطلب — بلا كلمة المرور */
+export type AuthenticatedAdmin = Omit<Admin, 'password'>;
 
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        _id: string;
-        id: string;
-        fullName: string;
-        phoneNumber: string;
-        email?: string;
-        role?: string;
-      }
+      user?: AuthenticatedUser;
+      admin?: AuthenticatedAdmin;
     }
   }
 }
 
 export interface AuthRequest extends Request {
-  user?: {
-    _id: string;
-    id: string;
-    fullName: string;
-    phoneNumber: string;
-    email?: string;
-    role?: string;
-  };
-  body: any;
-  params: any;
-  query: any;
-  headers: any;
+  user?: AuthenticatedUser;
+  admin?: AuthenticatedAdmin;
 }
 
 // للتوافق مع TypeScript module system
-export {}; 
+export {};

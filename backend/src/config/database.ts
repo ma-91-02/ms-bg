@@ -1,23 +1,19 @@
-import mongoose from 'mongoose';
-import validateEnv from './validateEnv';
-
-const env = validateEnv();
+import { connectDatabase, disconnectDatabase } from './prisma';
 
 /**
- * الاتصال بقاعدة بيانات MongoDB
+ * الاتصال بقاعدة بيانات PostgreSQL.
+ *
+ * أُبقي الاسم `connectDB` والتصدير الافتراضي كما كانا مع Mongoose
+ * حتى لا تتغير مواضع الاستدعاء.
  */
 const connectDB = async (): Promise<void> => {
   try {
-    // إعدادات الاتصال المتقدمة
-    const options: mongoose.ConnectOptions = {
-      // إعدادات اختيارية لتحسين الاتصال
-    };
-
-    await mongoose.connect(env.MONGODB_URI, options);
+    await connectDatabase();
   } catch (error) {
     console.error('❌ فشل الاتصال بقاعدة البيانات:', error);
     throw error;
   }
 };
 
-export default connectDB; 
+export { disconnectDatabase };
+export default connectDB;

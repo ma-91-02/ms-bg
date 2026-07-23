@@ -1,0 +1,386 @@
+// ============================================================================
+//  مخطط قاعدة البيانات — PostgreSQL + Prisma
+//  مُحوَّل من MongoDB/Mongoose مع الحفاظ على تطابق قيم الحقول حرفيًا
+//  حتى لا تنكسر عقود الـ API الحالية مع تطبيق الجوال.
+//
+//  ملاحظة على أسماء قيم الـ enums: كُتبت بأحرف صغيرة عمدًا ('lost' لا 'LOST')
+//  لتطابق ما يخزّنه Mongo اليوم وما يرسله العميل — أي هجرة بلا تغيير عقد.
+// ============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm, unaccent]
+}
+
+// ----------------------------------------------------------------------------
+//  التعدادات — كانت قيودًا في طبقة التطبيق فقط، صارت الآن أنواعًا أصلية في DB
+// ----------------------------------------------------------------------------
+
+enum AdvertisementType {
+  lost
+  found
+}
+
+enum ItemCategory {
+  passport
+  national_id
+  driving_license
+  other
+}
+
+enum Governorate {
+  baghdad
+  basra
+  erbil
+  sulaymaniyah
+  duhok
+  nineveh
+  kirkuk
+  diyala
+  anbar
+  babil
+  karbala
+  najaf
+  wasit
+  muthanna
+  diwaniyah
+  maysan
+  dhiqar
+  saladin
+}
+
+enum AdvertisementStatus {
+  pending
+  approved
+  rejected
+  resolved
+}
+
+enum MatchStatus {
+  pending
+  approved
+  rejected
+  completed
+}
+
+enum ContactRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+enum NotificationType {
+  advertisement
+  admin_message
+  contact_request
+  contact_approved
+  contact_rejected
+  system
+}
+
+enum AdminRole {
+  superadmin
+  admin
+  moderator
+}
+
+/// سبب حركة النقاط — لم يكن موجودًا في Mongo، أُضيف لبناء دفتر النقاط
+enum PointsReason {
+  ad_created
+  contact_confirmed
+  item_returned
+  monthly_active
+  admin_adjustment
+  reward_redeemed
+}
+
+// ----------------------------------------------------------------------------
+//  المستخدمون والمشرفون
+// ----------------------------------------------------------------------------
+
+model User {
+  id                String    @id @default(uuid()) @db.VarChar(36)
+  phoneNumber       String    @unique @map("phone_number")
+  fullName          String?   @map("full_name")
+  lastName          String?   @map("last_name")
+  email             String?
+  /// hash بـ bcrypt — التشفير يتم في طبقة الخدمة (userService) لا في hook
+  password          String?
+  birthDate         DateTime? @map("birth_date")
+  address           String?
+  profileImage      String?   @map("profile_image")
+  isBlocked         Boolean   @default(false) @map("is_blocked")
+  isAdmin           Boolean   @default(false) @map("is_admin")
+  isProfileComplete Boolean   @default(false) @map("is_profile_complete")
+
+  /// حقول الحظر والحذف المنطقي.
+  /// كان `usersController` يكتبها فعلًا، لكن مخطط Mongoose لم يعرّفها
+  /// فكان يحذفها بصمت (strict mode) — أي أن سبب الحظر والحذف المنطقي
+  /// لم يُحفظا قط. تعريفها هنا يجعل الميزة تعمل حقيقةً.
+  blockReason String?   @map("block_reason")
+  blockedAt   DateTime? @map("blocked_at")
+  blockedById String?   @map("blocked_by") @db.VarChar(36)
+
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by") @db.VarChar(36)
+
+  /// رصيد النقاط المُشتق — يُحدَّث فقط ضمن نفس معاملة إدخال دفتر النقاط
+  points Int @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  advertisements   Advertisement[]  @relation("AdvertisementOwner")
+  favorites        Favorite[]
+  notifications    Notification[]
+  pointsLedger     PointsEntry[]
+  contactRequests  ContactRequest[] @relation("ContactRequester")
+  receivedRequests ContactRequest[] @relation("ContactAdvertiser")
+
+  @@index([isBlocked])
+  @@map("users")
+}
+
+model Admin {
+  id        String    @id @default(uuid()) @db.VarChar(36)
+  username  String    @unique
+  password  String
+  email     String    @unique
+  fullName  String    @map("full_name")
+  role      AdminRole @default(admin)
+  lastLogin DateTime? @map("last_login")
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  approvedAds      Advertisement[]
+  approvedMatches  AdvertisementMatch[]
+  approvedContacts ContactRequest[]
+
+  @@map("admins")
+}
+
+// ----------------------------------------------------------------------------
+//  الإعلانات
+// ----------------------------------------------------------------------------
+
+model Advertisement {
+  id     String @id @default(uuid()) @db.VarChar(36)
+  userId String @map("user_id") @db.VarChar(36)
+  user   User   @relation("AdvertisementOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  type        AdvertisementType
+  category    ItemCategory
+  governorate Governorate
+
+  ownerName   String? @map("owner_name")
+  itemNumber  String? @map("item_number")
+  description String
+
+  /// مسارات الصور — text[] أصلي في Postgres، نفس شكل الحقل في Mongo
+  images String[] @default([])
+
+  /// كان GeoJSON Point في Mongo لكنه لم يُستعلم عنه قط.
+  /// إحداثيتان بسيطتان الآن؛ الترقية إلى PostGIS متاحة لاحقًا بلا كسر.
+  latitude  Float? @map("latitude")
+  longitude Float? @map("longitude")
+
+  contactPhone    String              @map("contact_phone")
+  status          AdvertisementStatus @default(pending)
+  isApproved      Boolean             @default(false) @map("is_approved")
+  approvedAt      DateTime?           @map("approved_at")
+  approvedById    String?             @map("approved_by") @db.VarChar(36)
+  approvedBy      Admin?              @relation(fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectionReason String?             @map("rejection_reason")
+  isResolved      Boolean             @default(false) @map("is_resolved")
+  resolvedAt      DateTime?           @map("resolved_at")
+  hideContactInfo Boolean             @default(true) @map("hide_contact_info")
+
+  /// الأرشفة — كان `usersController` يكتبها عند حذف المستخدم لكن
+  /// مخطط Mongoose لم يعرّفها فكانت تُحذف بصمت.
+  isArchived      Boolean @default(false) @map("is_archived")
+  archivedReason  String? @map("archived_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lostMatches     AdvertisementMatch[] @relation("LostAdvertisement")
+  foundMatches    AdvertisementMatch[] @relation("FoundAdvertisement")
+  favoritedBy     Favorite[]
+  contactRequests ContactRequest[]
+
+  /// الفهرس الذي يخدم استعلام المطابقة الرئيسي
+  @@index([type, category, isApproved, isResolved])
+  @@index([governorate, status])
+  @@index([userId, createdAt])
+  /// فهارس trigram — هي ما يجعل المطابقة النصية تعمل داخل DB بدل حلقة JS
+  @@index([ownerName(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([itemNumber(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("advertisements")
+}
+
+// ----------------------------------------------------------------------------
+//  المطابقات
+// ----------------------------------------------------------------------------
+
+model AdvertisementMatch {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  lostAdvertisementId String        @map("lost_advertisement_id") @db.VarChar(36)
+  lostAdvertisement   Advertisement @relation("LostAdvertisement", fields: [lostAdvertisementId], references: [id], onDelete: Cascade)
+
+  foundAdvertisementId String        @map("found_advertisement_id") @db.VarChar(36)
+  foundAdvertisement   Advertisement @relation("FoundAdvertisement", fields: [foundAdvertisementId], references: [id], onDelete: Cascade)
+
+  matchScore     Int         @map("match_score")
+  matchingFields String[]    @default([]) @map("matching_fields")
+  status         MatchStatus @default(pending)
+
+  approvedById String? @map("approved_by") @db.VarChar(36)
+  approvedBy   Admin?  @relation(fields: [approvedById], references: [id], onDelete: SetNull)
+
+  approvedAt         DateTime? @map("approved_at")
+  notificationSent   Boolean   @default(false) @map("notification_sent")
+  notificationSentAt DateTime? @map("notification_sent_at")
+  notes              String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// يُغني عن مسار /matches/cleanup-duplicates بالكامل — التكرار صار مستحيلًا
+  @@unique([lostAdvertisementId, foundAdvertisementId])
+  @@index([status, createdAt])
+  @@map("advertisement_matches")
+}
+
+// ----------------------------------------------------------------------------
+//  طلبات التواصل
+// ----------------------------------------------------------------------------
+
+model ContactRequest {
+  id String @id @default(uuid()) @db.VarChar(36)
+
+  userId String @map("user_id") @db.VarChar(36)
+  user   User   @relation("ContactRequester", fields: [userId], references: [id], onDelete: Cascade)
+
+  advertisementId String        @map("advertisement_id") @db.VarChar(36)
+  advertisement   Advertisement @relation(fields: [advertisementId], references: [id], onDelete: Cascade)
+
+  advertiserUserId String @map("advertiser_user_id") @db.VarChar(36)
+  advertiserUser   User   @relation("ContactAdvertiser", fields: [advertiserUserId], references: [id], onDelete: Cascade)
+
+  reason String
+  status ContactRequestStatus @default(pending)
+
+  approvedById String? @map("approved_by") @db.VarChar(36)
+  approvedBy   Admin?  @relation(fields: [approvedById], references: [id], onDelete: SetNull)
+
+  approvedAt      DateTime? @map("approved_at")
+  rejectionReason String?   @map("rejection_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  /// يمنع إغراق صاحب الإعلان بطلبات مكررة من نفس المستخدم
+  @@unique([userId, advertisementId])
+  @@index([status, createdAt])
+  @@map("contact_requests")
+}
+
+// ----------------------------------------------------------------------------
+//  المفضلة — كانت مصفوفة ObjectId داخل User، صارت جدول ربط
+// ----------------------------------------------------------------------------
+
+model Favorite {
+  userId String @map("user_id") @db.VarChar(36)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  advertisementId String        @map("advertisement_id") @db.VarChar(36)
+  advertisement   Advertisement @relation(fields: [advertisementId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, advertisementId])
+  @@index([advertisementId])
+  @@map("favorites")
+}
+
+// ----------------------------------------------------------------------------
+//  الإشعارات
+// ----------------------------------------------------------------------------
+
+model Notification {
+  id     String @id @default(uuid()) @db.VarChar(36)
+  userId String @map("user_id") @db.VarChar(36)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title String
+  body  String
+  type  NotificationType
+
+  /// معرّف الكائن المرتبط (إعلان / مطابقة / طلب تواصل) — بلا مفتاح أجنبي لأنه متعدد الأنواع
+  referenceId String? @map("reference_id") @db.VarChar(36)
+  data        Json?
+  isRead      Boolean @default(false) @map("is_read")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ----------------------------------------------------------------------------
+//  رموز التحقق OTP
+// ----------------------------------------------------------------------------
+
+model Otp {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  phoneNumber String   @map("phone_number")
+  /// hash بـ bcrypt للرمز — لم يعد يُخزَّن كنص صريح كما في Mongo
+  code        String
+  expiresAt   DateTime @map("expires_at")
+  isUsed      Boolean  @default(false) @map("is_used")
+
+  /// عدّاد محاولات فاشلة — يمنع تخمين الرمز (لم يكن موجودًا سابقًا)
+  attempts Int @default(0)
+
+  isForPasswordReset Boolean @default(false) @map("is_for_password_reset")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// TTL كان تلقائيًا في Mongo (expires: 900). في Postgres يحذفه سكربت تنظيف دوري.
+  @@index([phoneNumber, isUsed, expiresAt])
+  @@index([expiresAt])
+  @@map("otps")
+}
+
+// ----------------------------------------------------------------------------
+//  دفتر النقاط — جديد. الوثائق تصف نظام نقاط ولم يكن منه سوى حقل عددي مفرد.
+// ----------------------------------------------------------------------------
+
+model PointsEntry {
+  id     String @id @default(uuid()) @db.VarChar(36)
+  userId String @map("user_id") @db.VarChar(36)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// موجب = كسب، سالب = استهلاك
+  amount Int
+  reason PointsReason
+
+  /// معرّف السبب (إعلان / طلب تواصل / مكافأة)
+  referenceId String? @map("reference_id") @db.VarChar(36)
+  note        String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("points_entries")
+}

@@ -1,122 +1,110 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import User from '../../models/mobile/User';
-import Admin from '../../models/admin/Admin';
+import prisma from '../../config/prisma';
+import { sanitizeUser } from '../../services/common/userService';
+
+/**
+ * وسائط المصادقة.
+ *
+ * كانت موزّعة على أربعة ملفات، كلٌّ منها يتحقق من التوكن بقيمة احتياطية
+ * مختلفة لـ JWT_SECRET ('default-secret-key' · 'default-secret' ·
+ * 'your_jwt_secret' · 'your-secret-key'). أي غياب للمتغير في الإنتاج كان
+ * يعني توكنات قابلة للتزوير. صار مصدر السر واحدًا وبلا قيمة احتياطية.
+ */
 
 interface JwtPayload {
   id?: string;
   userId?: string;
+  role?: string;
+  username?: string;
 }
 
-// Extend Express Request interface
-declare global {
-  namespace Express {
-    interface Request {
-      user?: any;
-      admin?: any;
-    }
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    // خطأ إعداد لا خطأ مصادقة — يجب أن يظهر بوضوح لا أن يُتجاوَز بقيمة افتراضية
+    throw new Error('JWT_SECRET غير مضبوط — لا يمكن التحقق من التوكنات');
   }
-}
+  return secret;
+};
 
-// Mobile user authentication middleware
+const extractToken = (req: Request): string | null => {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) return null;
+  const token = header.slice(7).trim();
+  return token.length > 0 ? token : null;
+};
+
+const unauthorized = (res: Response, message: string) =>
+  res.status(401).json({ success: false, message });
+
+/** يفكّ التوكن ويعيد الحمولة، أو null إن كان غير صالح/منتهيًا */
+const decodeToken = (token: string): JwtPayload | null => {
+  try {
+    return jwt.verify(token, getJwtSecret()) as JwtPayload;
+  } catch (error: any) {
+    if (error?.name === 'JsonWebTokenError' || error?.name === 'TokenExpiredError') {
+      return null;
+    }
+    throw error; // خطأ إعداد — يُمرَّر لمعالج الأخطاء
+  }
+};
+
+/** حماية مسارات تطبيق الجوال */
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    let token;
-    
-    // Check if token exists in headers
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Not authorized, no token provided'
-      });
-    }
-    
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret') as JwtPayload;
-    
-    // Find user
+    const token = extractToken(req);
+    if (!token) return unauthorized(res, 'غير مصرح به. يرجى تسجيل الدخول');
+
+    const decoded = decodeToken(token);
+    if (!decoded) return unauthorized(res, 'توكن غير صالح أو منتهي الصلاحية');
+
     const userId = decoded.id || decoded.userId;
-    const user = await User.findById(userId);
-    
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-    
-    // Check if user is blocked
+    if (!userId) return unauthorized(res, 'توكن غير صالح');
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return unauthorized(res, 'المستخدم غير موجود. يرجى تسجيل الدخول مرة أخرى');
+
     if (user.isBlocked) {
       return res.status(403).json({
         success: false,
-        message: 'Your account has been blocked'
+        message: 'تم حظر حسابك. يرجى التواصل مع الدعم',
       });
     }
-    
-    // Set user in request
-    req.user = user;
-    next();
+
+    // بلا كلمة المرور — كان `.select('-password')` في نسخة Mongoose
+    req.user = sanitizeUser(user);
+    return next();
   } catch (error) {
-    console.error('Authentication error:', error);
-    return res.status(401).json({
-      success: false,
-      message: 'غير مصرح به'
-    });
+    return next(error);
   }
-  return;
 };
 
-// Admin authentication middleware
+/** حماية مسارات لوحة التحكم */
 export const adminProtect = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    let token;
-    
-    // Check if token exists in headers
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Not authorized, no token provided'
-      });
-    }
-    
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_jwt_secret') as JwtPayload;
-    
-    // Find admin
-    const admin = await Admin.findById(decoded.id);
-    
-    if (!admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'Admin not found'
-      });
-    }
-    
-    // Check if admin is active
+    const token = extractToken(req);
+    if (!token) return unauthorized(res, 'غير مصرح به. يرجى تسجيل الدخول');
+
+    const decoded = decodeToken(token);
+    if (!decoded?.id) return unauthorized(res, 'توكن غير صالح أو منتهي الصلاحية');
+
+    const admin = await prisma.admin.findUnique({ where: { id: decoded.id } });
+    if (!admin) return unauthorized(res, 'المشرف غير موجود. يرجى تسجيل الدخول مرة أخرى');
+
     if (!admin.isActive) {
       return res.status(403).json({
         success: false,
-        message: 'Your account has been deactivated'
+        message: 'تم تعطيل حسابك. يرجى التواصل مع المشرف الأعلى',
       });
     }
-    
-    // Set admin in request
-    req.admin = admin;
-    next();
+
+    const { password, ...safeAdmin } = admin;
+    req.admin = safeAdmin;
+    return next();
   } catch (error) {
-    console.error('Admin authentication error:', error);
-    return res.status(401).json({
-      success: false,
-      message: 'غير مصرح به'
-    });
+    return next(error);
   }
-  return;
-}; 
+};
+
+export default { protect, adminProtect };

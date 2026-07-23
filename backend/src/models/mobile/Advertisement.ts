@@ -1,163 +1,64 @@
-import mongoose, { Schema, Document } from 'mongoose';
+/**
+ * الإعلانات — تعريفات النوع والتعدادات.
+ *
+ * لم يعد هذا الملف يعرّف مخطط Mongoose؛ الجدول معرَّف في
+ * `prisma/schema.prisma`. أُبقي المسار وأسماء التعدادات كما هي
+ * (`AdvertisementType.LOST` بأحرف كبيرة) لأن عشرات المواضع تستوردها،
+ * بينما القيم نفسها ('lost') تطابق تعداد Postgres حرفيًا.
+ *
+ * الوصول للبيانات: `prisma.advertisement.*` عبر `config/prisma`.
+ */
+import {
+  AdvertisementType as PrismaAdType,
+  ItemCategory as PrismaCategory,
+  Governorate as PrismaGovernorate,
+  AdvertisementStatus as PrismaAdStatus,
+} from '@prisma/client';
+import type { Advertisement as PrismaAdvertisement } from '@prisma/client';
 
-// تعريف نوع الإعلان (مفقود أو موجود)
-export enum AdvertisementType {
-  LOST = 'lost',
-  FOUND = 'found'
-}
+export const AdvertisementType = {
+  LOST: PrismaAdType.lost,
+  FOUND: PrismaAdType.found,
+} as const;
+export type AdvertisementType = PrismaAdType;
 
-// تعريف فئة العنصر
-export enum ItemCategory {
-  PASSPORT = 'passport',
-  NATIONAL_ID = 'national_id',
-  DRIVING_LICENSE = 'driving_license',
-  OTHER = 'other'
-}
+export const ItemCategory = {
+  PASSPORT: PrismaCategory.passport,
+  NATIONAL_ID: PrismaCategory.national_id,
+  DRIVING_LICENSE: PrismaCategory.driving_license,
+  OTHER: PrismaCategory.other,
+} as const;
+export type ItemCategory = PrismaCategory;
 
-// قائمة المحافظات
-export enum Governorate {
-  BAGHDAD = 'baghdad',
-  BASRA = 'basra',
-  ERBIL = 'erbil',
-  SULAYMANIYAH = 'sulaymaniyah',
-  DUHOK = 'duhok',
-  NINEVEH = 'nineveh',
-  KIRKUK = 'kirkuk',
-  DIYALA = 'diyala',
-  ANBAR = 'anbar',
-  BABIL = 'babil',
-  KARBALA = 'karbala',
-  NAJAF = 'najaf',
-  WASIT = 'wasit',
-  MUTHANNA = 'muthanna',
-  DIWANIYAH = 'diwaniyah',
-  MAYSAN = 'maysan',
-  DHIQAR = 'dhiqar',
-  SALADIN = 'saladin'
-}
+export const Governorate = {
+  BAGHDAD: PrismaGovernorate.baghdad,
+  BASRA: PrismaGovernorate.basra,
+  ERBIL: PrismaGovernorate.erbil,
+  SULAYMANIYAH: PrismaGovernorate.sulaymaniyah,
+  DUHOK: PrismaGovernorate.duhok,
+  NINEVEH: PrismaGovernorate.nineveh,
+  KIRKUK: PrismaGovernorate.kirkuk,
+  DIYALA: PrismaGovernorate.diyala,
+  ANBAR: PrismaGovernorate.anbar,
+  BABIL: PrismaGovernorate.babil,
+  KARBALA: PrismaGovernorate.karbala,
+  NAJAF: PrismaGovernorate.najaf,
+  WASIT: PrismaGovernorate.wasit,
+  MUTHANNA: PrismaGovernorate.muthanna,
+  DIWANIYAH: PrismaGovernorate.diwaniyah,
+  MAYSAN: PrismaGovernorate.maysan,
+  DHIQAR: PrismaGovernorate.dhiqar,
+  SALADIN: PrismaGovernorate.saladin,
+} as const;
+export type Governorate = PrismaGovernorate;
 
-// حالة الإعلان
-export enum AdvertisementStatus {
-  PENDING = 'pending',    // في انتظار الموافقة
-  APPROVED = 'approved',  // تمت الموافقة
-  REJECTED = 'rejected',  // مرفوض
-  RESOLVED = 'resolved'   // تم حله (وجد صاحبه)
-}
+export const AdvertisementStatus = {
+  PENDING: PrismaAdStatus.pending,
+  APPROVED: PrismaAdStatus.approved,
+  REJECTED: PrismaAdStatus.rejected,
+  RESOLVED: PrismaAdStatus.resolved,
+} as const;
+export type AdvertisementStatus = PrismaAdStatus;
 
-// واجهة الإعلان
-export interface IAdvertisement extends Document {
-  userId: mongoose.Schema.Types.ObjectId;
-  type: AdvertisementType;
-  category: ItemCategory;
-  governorate: Governorate;
-  ownerName?: string;
-  itemNumber?: string;
-  description: string;
-  images: string[];
-  location?: {
-    type: string;
-    coordinates: number[];
-  };
-  contactPhone: string;
-  status: AdvertisementStatus;
-  isApproved: boolean;     // هل تمت الموافقة على الإعلان
-  approvedAt?: Date;       // تاريخ الموافقة
-  approvedBy?: mongoose.Schema.Types.ObjectId; // مشرف الموافقة
-  rejectionReason?: string; // سبب الرفض (إن وجد)
-  isResolved: boolean;
-  resolvedAt?: Date;
-  hideContactInfo: boolean;    // إخفاء معلومات التواصل
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// مخطط الإعلان
-const advertisementSchema = new Schema<IAdvertisement>(
-  {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: [true, 'المستخدم مطلوب']
-    },
-    type: {
-      type: String,
-      enum: Object.values(AdvertisementType),
-      required: [true, 'نوع الإعلان مطلوب (مفقود/موجود)']
-    },
-    category: {
-      type: String,
-      enum: Object.values(ItemCategory),
-      required: [true, 'فئة العنصر مطلوبة']
-    },
-    governorate: {
-      type: String,
-      enum: Object.values(Governorate),
-      required: [true, 'المحافظة مطلوبة']
-    },
-    ownerName: {
-      type: String,
-      // اختياري حسب الحالة
-    },
-    itemNumber: {
-      type: String,
-      // اختياري حسب الحالة
-    },
-    description: {
-      type: String,
-      required: [true, 'وصف العنصر مطلوب']
-    },
-    images: {
-      type: [String],
-      default: []
-    },
-    location: {
-      type: {
-        type: String,
-        enum: ['Point'],
-        default: 'Point'
-      },
-      coordinates: {
-        type: [Number],
-        default: [0, 0]
-      }
-    },
-    contactPhone: {
-      type: String,
-      required: [true, 'رقم الاتصال مطلوب']
-    },
-    status: {
-      type: String,
-      enum: Object.values(AdvertisementStatus),
-      default: AdvertisementStatus.PENDING
-    },
-    isApproved: {
-      type: Boolean,
-      default: false  // تعيين افتراضي: الإعلان يحتاج موافقة
-    },
-    approvedAt: Date,
-    approvedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Admin'
-    },
-    rejectionReason: String,
-    isResolved: {
-      type: Boolean,
-      default: false
-    },
-    resolvedAt: Date,
-    hideContactInfo: {
-      type: Boolean,
-      default: true  // إخفاء معلومات التواصل افتراضيًا
-    }
-  },
-  {
-    timestamps: true
-  }
-);
-
-// إضافة مؤشر جغرافي للبحث حسب الموقع
-advertisementSchema.index({ location: '2dsphere' });
-
-const Advertisement = mongoose.model<IAdvertisement>('Advertisement', advertisementSchema);
-
-export default Advertisement; 
+/** كان `IAdvertisement extends Document` — صار النوع المولَّد من المخطط */
+export type IAdvertisement = PrismaAdvertisement;
