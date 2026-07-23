@@ -45,13 +45,23 @@ cd backend && npx tsc --noEmit --skipLibCheck
 openssl rand -base64 32
 ```
 
-### 3. النطاقات
+### 3. النطاق
 
-- **backend** → نطاق فرعي مثل `api.example.com` (المنفذ 3001)
-- **frontend** → النطاق الرئيسي مثل `panel.example.com` (المنفذ 80)
-- **postgres** → **بلا نطاق**، لا يُنشر على الإنترنت إطلاقًا
+نطاق واحد على خدمة **gateway** وحدها. البقية على الشبكة الداخلية ولا
+تُنشر على الإنترنت إطلاقًا.
 
-Coolify يتولى شهادات TLS تلقائيًا عبر Let's Encrypt.
+عبر الـ API يُضبط بحقل `docker_compose_domains` كمصفوفة:
+
+```bash
+curl -X PATCH "$CF_URL/api/v1/applications/$APP" \
+  -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+  -d '[{"name":"gateway","domain":"https://ms-bg.com"}]'
+```
+
+ملاحظة: الحقل يقبل **مصفوفة** لا كائنًا، ولا يكفي ضبط متغير البيئة
+`SERVICE_FQDN_GATEWAY` وحده — لن يُنشئ مسارًا في الوكيل.
+
+Coolify يتولى شهادة TLS تلقائيًا عبر Let's Encrypt.
 
 ### 4. التخزين الدائم
 
@@ -71,20 +81,15 @@ Coolify يتولى شهادات TLS تلقائيًا عبر Let's Encrypt.
 
 ---
 
-## بعد أول نشر — خطوة يدوية إلزامية
+## دوال العربية — تلقائية
 
-دالة تطبيع الأسماء العربية وفهارس trigram **ليست جزءًا من ترحيلات Prisma**
-ويجب تطبيقها مرة واحدة، وإلا تعطّلت المطابقة بالكامل:
+دالة `normalize_ar` وفهارس trigram تُطبَّق تلقائيًا عند إقلاع الخلفية
+(ضمن `CMD` في Dockerfile) لأن نسيانها يُعطّل المطابقة بلا رسالة خطأ.
+
+للتأكد من عملها:
 
 ```bash
-docker exec -i <اسم-حاوية-postgres> psql -U msbg -d ms_main_db < backend/prisma/sql/001_arabic_normalization.sql
-```
-
-للتحقق من نجاحها:
-
-```sql
-SELECT similarity(normalize_ar('أحمد علي'), normalize_ar('احمد علي'));
--- يجب أن تُرجع 1.00
+curl https://ms-bg.com/api/admin/matches/run-matching -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
 ---
@@ -121,5 +126,7 @@ MONGODB_URI="mongodb+srv://..." npm run db:migrate-from-mongo
 | الخادم يرفض الإقلاع مع رسالة عن `DEMO_MODE` | `true` مع `NODE_ENV=production` |
 | اللوحة تفتح لكن كل الطلبات تفشل | `REACT_APP_API_URL` خاطئ — يستلزم **إعادة بناء** لا إعادة تشغيل |
 | `غير مسموح بواسطة CORS` | `CORS_ORIGINS` لا يطابق نطاق اللوحة حرفيًا (بما فيه `https://`) |
-| المطابقة لا تُنتج نتائج | لم يُطبَّق `001_arabic_normalization.sql` |
+| المطابقة لا تُنتج نتائج | راجع سجل إقلاع الخلفية: تطبيق دوال العربية يجري فيه |
+| النطاق يعطي 404 | `docker_compose_domains` غير مضبوط — راجع الخطوة 3 |
+| فشل النشر: port already allocated | نُشر منفذ في ملف Coolify؛ التجاوزات المحلية مكانها `docker-compose.local.yml` |
 | الصور تختفي بعد إعادة النشر | وحدة `uploads` غير مربوطة |
