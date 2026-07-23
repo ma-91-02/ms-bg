@@ -9,7 +9,7 @@
     "dev": "ts-node-dev --project tsconfig.json --respawn --transpile-only src/index.ts",
     "clean": "rimraf dist",
     "rebuild": "npm run clean && npm run build",
-    "test": "jest",
+    "test": "DATABASE_URL=\"postgresql://msbg:msbg_dev_password@localhost:5433/ms_main_db_test?schema=public\" jest --runInBand",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "prisma:generate": "prisma generate",
@@ -17,7 +17,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "db:seed": "ts-node prisma/seed.ts",
-    "db:migrate-from-mongo": "ts-node prisma/migrate-from-mongo.ts"
+    "db:migrate-from-mongo": "ts-node prisma/migrate-from-mongo.ts",
+    "test:db:setup": "DATABASE_URL=\"postgresql://msbg:msbg_dev_password@localhost:5433/ms_main_db_test?schema=public\" prisma migrate deploy && DATABASE_URL=\"postgresql://msbg:msbg_dev_password@localhost:5433/ms_main_db_test?schema=public\" prisma db execute --file prisma/sql/001_arabic_normalization.sql --schema prisma/schema.prisma"
   },
   "keywords": [],
   "author": "",

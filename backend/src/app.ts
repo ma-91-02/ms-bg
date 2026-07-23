@@ -27,7 +27,9 @@ app.use(
     origin: (origin, callback) => {
       // السماح للطلبات بلا origin (تطبيق الجوال، أدوات الاختبار)
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error('غير مسموح بواسطة CORS'));
+      // رفض بلا رمي استثناء: رمي Error هنا يمرّ إلى معالج الأخطاء فيعيد 500
+      // على طلب OPTIONS التمهيدي، وهو ما يُخفي سبب الرفض الحقيقي
+      return callback(null, false);
     },
     credentials: true,
   })
