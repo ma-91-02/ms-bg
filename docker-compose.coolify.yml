@@ -97,9 +97,10 @@ services:
       - pwa
     environment:
       SERVICE_FQDN_GATEWAY_80: /
-    # للتشغيل المحلي فقط — في Coolify يتولى الوكيل العكسي المنفذ
-    ports:
-      - '${GATEWAY_PORT:-8080}:80'
+    # لا تُنشر منافذ هنا: الوكيل العكسي في Coolify هو من يوجّه إلى
+    # الحاوية عبر الشبكة الداخلية. نشر منفذ يصطدم بما هو محجوز على
+    # الخادم ويُفشل النشر.
+    # للتشغيل المحلي استخدم: docker compose -f docker-compose.coolify.yml -f docker-compose.local.yml up
 
 volumes:
   pgdata:
