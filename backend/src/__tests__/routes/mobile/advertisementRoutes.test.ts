@@ -1,82 +1,123 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
-import User from '../../../models/mobile/User';
-import Advertisement from '../../../models/mobile/Advertisement';
-import app from '../../../index';
+import app from '../../../app';
+import prisma from '../../../config/prisma';
 
-describe('Advertisement Routes', () => {
-  let authToken: string;
-  let testAdId: string;
-  
-  // إنشاء مستخدم وإعلان للاختبار
-  beforeEach(async () => {
-    // إنشاء مستخدم اختباري
-    const testUser = await new User({
-      phoneNumber: '+9639876543210',
-      password: 'password123',
-      fullName: 'مستخدم اختبار',
-      isProfileComplete: true
-    }).save();
-    
-    // إنشاء توكن للمستخدم
-    authToken = jwt.sign(
-      { id: testUser._id },
-      process.env.JWT_SECRET || 'test_secret_key',
-      { expiresIn: '1h' }
-    );
-    
-    // إنشاء إعلان اختباري
-    const testAd = await new Advertisement({
-      title: 'إعلان اختبار',
-      description: 'وصف اختبار للإعلان',
-      type: 'lost',
-      category: 'others',
-      userId: testUser._id,
-      location: {
-        type: 'Point',
-        coordinates: [44.3661, 33.3157],
-        address: 'عنوان اختبار'
-      }
-    }).save();
-    
-    // معالجة آمنة لـ _id
-    testAdId = testAd._id?.toString() || '';
+const authFor = (userId: string) =>
+  `Bearer ${jwt.sign({ id: userId }, process.env.JWT_SECRET!, { expiresIn: '1h' })}`;
+
+const createUser = (phoneNumber: string) =>
+  prisma.user.create({
+    data: { phoneNumber, fullName: 'مستخدم اختبار', isProfileComplete: true },
   });
-  
-  describe('GET /api/mobile/advertisements', () => {
-    it('يجب أن يجلب جميع الإعلانات', async () => {
-      const response = await request(app)
-        .get('/api/mobile/advertisements');
-      
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(Array.isArray(response.body.data)).toBe(true);
-    });
-  });
-  
-  describe('GET /api/mobile/advertisements/:id', () => {
-    it('يجب أن يجلب إعلان محدد', async () => {
-      const response = await request(app)
-        .get(`/api/mobile/advertisements/${testAdId}`);
-      
-      expect(response.status).toBe(200);
-      expect(response.body.data.title).toBe('إعلان اختبار');
-    });
-  });
-  
+
+const adPayload = {
+  type: 'lost',
+  category: 'passport',
+  governorate: 'baghdad',
+  description: 'جواز سفر مفقود قرب ساحة التحرير',
+  contactPhone: '+9647701234567',
+  ownerName: 'أحمد علي',
+};
+
+describe('إعلانات تطبيق الجوال', () => {
   describe('POST /api/mobile/advertisements', () => {
-    it('يجب أن ينشئ إعلان جديد للمستخدم المصرح له', async () => {
-      const response = await request(app)
+    it('يرفض الطلب بلا توكن', async () => {
+      const res = await request(app).post('/api/mobile/advertisements').send(adPayload);
+      expect(res.status).toBe(401);
+    });
+
+    it('ينشئ إعلانًا غير معتمد بانتظار المراجعة', async () => {
+      const user = await createUser('+9647701111111');
+
+      const res = await request(app)
         .post('/api/mobile/advertisements')
-        .set('Authorization', `Bearer ${authToken}`)
-        .field('title', 'إعلان جديد')
-        .field('description', 'وصف للإعلان الجديد')
-        .field('type', 'found')
-        .field('category', 'electronics');
-      
-      expect(response.status).toBe(201);
-      expect(response.body.data.title).toBe('إعلان جديد');
+        .set('Authorization', authFor(user.id))
+        .send(adPayload);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.isApproved).toBe(false);
+      expect(res.body.data.status).toBe('pending');
+    });
+
+    it('لا يسمح للمستخدم باعتماد إعلانه بنفسه', async () => {
+      const user = await createUser('+9647702222222');
+
+      // هذه كانت ثغرة تصعيد صلاحيات: req.body كان يُمرَّر كاملًا
+      const res = await request(app)
+        .post('/api/mobile/advertisements')
+        .set('Authorization', authFor(user.id))
+        .send({ ...adPayload, isApproved: true, status: 'approved' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.isApproved).toBe(false);
+      expect(res.body.data.status).toBe('pending');
+    });
+
+    it('يرفض الإعلان الناقص الحقول', async () => {
+      const user = await createUser('+9647703333333');
+
+      const res = await request(app)
+        .post('/api/mobile/advertisements')
+        .set('Authorization', authFor(user.id))
+        .send({ type: 'lost' });
+
+      expect(res.status).toBe(400);
     });
   });
-}); 
+
+  describe('GET /api/mobile/advertisements', () => {
+    it('لا يعرض إلا الإعلانات المعتمدة', async () => {
+      const user = await createUser('+9647704444444');
+
+      await prisma.advertisement.create({
+        data: { ...(adPayload as any), userId: user.id, isApproved: false },
+      });
+      await prisma.advertisement.create({
+        data: {
+          ...(adPayload as any),
+          userId: user.id,
+          isApproved: true,
+          status: 'approved',
+        },
+      });
+
+      const res = await request(app).get('/api/mobile/advertisements');
+
+      expect(res.status).toBe(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.data[0].isApproved).toBe(true);
+    });
+
+    it('يخفي رقم التواصل عن غير صاحب الإعلان', async () => {
+      const owner = await createUser('+9647705555555');
+
+      await prisma.advertisement.create({
+        data: {
+          ...(adPayload as any),
+          userId: owner.id,
+          isApproved: true,
+          status: 'approved',
+          hideContactInfo: true,
+        },
+      });
+
+      const res = await request(app).get('/api/mobile/advertisements');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data[0].contactPhone).not.toBe(adPayload.contactPhone);
+    });
+  });
+
+  describe('GET /api/mobile/advertisements/constants', () => {
+    it('يعيد التعدادات بتسمياتها العربية', async () => {
+      const res = await request(app).get('/api/mobile/advertisements/constants');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.governorates).toHaveLength(18);
+      expect(res.body.data.types).toEqual(
+        expect.arrayContaining([{ value: 'lost', label: 'مفقود' }])
+      );
+    });
+  });
+});

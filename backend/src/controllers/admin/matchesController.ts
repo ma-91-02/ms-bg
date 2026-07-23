@@ -1,784 +1,399 @@
-import { Request, Response } from 'express';
-import Advertisement from '../../models/mobile/Advertisement';
-import AdvertisementMatch, { MatchStatus } from '../../models/mobile/AdvertisementMatch';
-import { AuthRequest, AdvertisementType } from '../../types';
-import { IMatch } from '../../types/admin/admin';
-import User from '../../models/mobile/User';
-import { findPotentialMatches } from '../../services/common/matchingService';
+import { Response } from 'express';
+import { Prisma, MatchStatus as Status } from '@prisma/client';
+import prisma from '../../config/prisma';
+import { MatchStatus } from '../../models/mobile/AdvertisementMatch';
+import { AuthRequest } from '../../types/express';
+import * as matchingService from '../../services/common/matchingService';
+import * as notificationService from '../../services/mobile/notificationService';
+import { NotificationType } from '../../types/mobile/notifications';
 
-// الحصول على قائمة المطابقات المعلقة
+/** الحقول المرتبطة التي تُرجَع مع كل مطابقة */
+const matchInclude = {
+  lostAdvertisement: {
+    select: {
+      id: true,
+      type: true,
+      category: true,
+      governorate: true,
+      ownerName: true,
+      itemNumber: true,
+      description: true,
+      images: true,
+      userId: true,
+      user: { select: { id: true, fullName: true, phoneNumber: true } },
+    },
+  },
+  foundAdvertisement: {
+    select: {
+      id: true,
+      type: true,
+      category: true,
+      governorate: true,
+      ownerName: true,
+      itemNumber: true,
+      description: true,
+      images: true,
+      userId: true,
+      user: { select: { id: true, fullName: true, phoneNumber: true } },
+    },
+  },
+} satisfies Prisma.AdvertisementMatchInclude;
+
+const requireAdmin = (req: AuthRequest, res: Response): boolean => {
+  if (!req.admin) {
+    res.status(401).json({
+      success: false,
+      message: 'غير مصرح به. يجب تسجيل الدخول كمشرف',
+    });
+    return false;
+  }
+  return true;
+};
+
+const parsePaging = (req: AuthRequest) => ({
+  page: Math.max(1, Number(req.query.page) || 1),
+  limit: Math.min(100, Math.max(1, Number(req.query.limit) || 10)),
+});
+
+const listMatches = async (
+  res: Response,
+  where: Prisma.AdvertisementMatchWhereInput,
+  page: number,
+  limit: number,
+  orderBy: Prisma.AdvertisementMatchOrderByWithRelationInput
+) => {
+  const [total, matches] = await prisma.$transaction([
+    prisma.advertisementMatch.count({ where }),
+    prisma.advertisementMatch.findMany({
+      where,
+      orderBy,
+      skip: (page - 1) * limit,
+      take: limit,
+      include: matchInclude,
+    }),
+  ]);
+
+  return res.status(200).json({
+    success: true,
+    count: matches.length,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    data: matches,
+  });
+};
+
+/** المطابقات المعلّقة — الأعلى درجةً أولًا لأنها الأجدر بالمراجعة */
 export const getPendingMatches = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
-
-    console.log('🔍 جاري تحديث وعرض المطابقات المحتملة...');
-    
-    // 1. قبل حذف المطابقات المعلقة، نحفظ المطابقات المعتمدة والمرفوضة
-    console.log('🔄 التحقق من المطابقات الحالية...');
-    
-    // نحتفظ فقط بالمطابقات المعتمدة والمرفوضة
-    const existingApprovedRejectedMatches = await AdvertisementMatch.find({
-      status: { $in: [MatchStatus.APPROVED, MatchStatus.REJECTED] }
-    });
-    console.log(`ℹ️ تم العثور على ${existingApprovedRejectedMatches.length} مطابقة معتمدة/مرفوضة`);
-    
-    // 2. حذف المطابقات المعلقة فقط
-    console.log('🗑️ حذف المطابقات المعلقة السابقة...');
-    const deleteResult = await AdvertisementMatch.deleteMany({ status: MatchStatus.PENDING });
-    console.log(`تم حذف ${deleteResult.deletedCount} مطابقة معلقة سابقة`);
-    
-    // 3. إنشاء مطابقات جديدة من الإعلانات المعتمدة فقط
-    console.log('🔄 إنشاء مطابقات جديدة من الإعلانات المعتمدة...');
-    
-    // جلب جميع الإعلانات المعتمدة وغير المحلولة
-    const advertisements = await Advertisement.find({ 
-      isApproved: true,
-      isResolved: false 
-    });
-    
-    console.log(`📊 العثور على ${advertisements.length} إعلان معتمد للمطابقة`);
-    
-    // إنشاء مصفوفة تخزن جميع عمليات المطابقة المحتملة
-    const potentialMatches: IMatch[] = [];
-    
-    // إنشاء مجموعة للتحقق من وجود مطابقات مسبقة
-    const existingMatchesSet = new Set<string>();
-    
-    // إضافة المطابقات الحالية إلى المجموعة لتجنب التكرار
-    existingApprovedRejectedMatches.forEach(match => {
-      const key1 = `${match.lostAdvertisementId.toString()}-${match.foundAdvertisementId.toString()}`;
-      const key2 = `${match.foundAdvertisementId.toString()}-${match.lostAdvertisementId.toString()}`;
-      existingMatchesSet.add(key1);
-      existingMatchesSet.add(key2);
-    });
-    
-    // البحث عن جميع الإعلانات المفقودة
-    const lostAds = advertisements.filter(ad => ad.type === 'lost');
-    console.log(`💼 العثور على ${lostAds.length} إعلان مفقود`);
-    
-    // البحث عن جميع الإعلانات الموجودة
-    const foundAds = advertisements.filter(ad => ad.type === 'found');
-    console.log(`🔍 العثور على ${foundAds.length} إعلان موجود`);
-    
-    // مقارنة المفقودات مع الموجودات
-    for (const lostAd of lostAds) {
-      for (const foundAd of foundAds) {
-        // التحقق من وجود هذه المطابقة مسبقاً (في المطابقات المعتمدة/المرفوضة)
-        const lostAdId = lostAd._id?.toString() || '';
-        const foundAdId = foundAd._id?.toString() || '';
-        const matchKey1 = `${lostAdId}-${foundAdId}`;
-        const matchKey2 = `${foundAdId}-${lostAdId}`;
-        
-        if (existingMatchesSet.has(matchKey1) || existingMatchesSet.has(matchKey2)) {
-          console.log(`⚠️ تجاهل مطابقة موجودة مسبقاً: ${matchKey1}`);
-          continue;
-        }
-        
-        // التحقق من تطابق الفئة (إذا كانت متوفرة)
-        if (lostAd.category && foundAd.category && lostAd.category !== foundAd.category) {
-          continue;
-        }
-        
-        // حساب درجات التشابه لمختلف الحقول
-        const matchingFields: string[] = [];
-        let totalScore = 0;
-        
-        // 1. فحص تطابق المحافظة
-        if (lostAd.governorate && foundAd.governorate && lostAd.governorate === foundAd.governorate) {
-          matchingFields.push('governorate');
-          totalScore += 10;
-        }
-        
-        // 2. فحص تطابق رقم المستند
-        if (lostAd.itemNumber && foundAd.itemNumber) {
-          // تنظيف الأرقام للمقارنة
-          const cleanLostNumber = lostAd.itemNumber.replace(/\s/g, '');
-          const cleanFoundNumber = foundAd.itemNumber.replace(/\s/g, '');
-          
-          if (cleanLostNumber === cleanFoundNumber) {
-            matchingFields.push('itemNumber');
-            totalScore += 60;
-          } else if (cleanLostNumber.includes(cleanFoundNumber) || cleanFoundNumber.includes(cleanLostNumber)) {
-            matchingFields.push('itemNumber_partial');
-            totalScore += 40;
-          }
-        }
-        
-        // 3. فحص تطابق الاسم
-        if (lostAd.ownerName && foundAd.ownerName) {
-          const nameSimilarity = calculateSimilarity(lostAd.ownerName, foundAd.ownerName);
-          if (nameSimilarity >= 70) {
-            matchingFields.push('ownerName');
-            totalScore += 30;
-          } else if (nameSimilarity >= 40) {
-            matchingFields.push('ownerName_partial');
-            totalScore += 20;
-          }
-        }
-        
-        // 4. فحص تطابق الوصف
-        if (lostAd.description && foundAd.description) {
-          const descriptionSimilarity = calculateSimilarity(lostAd.description, foundAd.description);
-          if (descriptionSimilarity >= 60) {
-            matchingFields.push('description');
-            totalScore += 10;
-          }
-        }
-        
-        // إذا كان هناك تطابق كافي، أضف إلى المطابقات المحتملة
-        if (totalScore > 20 || matchingFields.length > 0) {
-          // إضافة مفتاح هذه المطابقة إلى المجموعة لمنع إضافتها مرة أخرى
-          existingMatchesSet.add(matchKey1);
-          existingMatchesSet.add(matchKey2);
-          
-          console.log(`⭐ مطابقة جديدة محتملة: المفقود ${lostAdId} مع الموجود ${foundAdId} (${totalScore}%)`);
-          
-          potentialMatches.push({
-            lostAdvertisementId: lostAdId,
-            foundAdvertisementId: foundAdId,
-            matchScore: totalScore,
-            matchingFields,
-            status: MatchStatus.PENDING,
-            notificationSent: false
-          });
-        }
-      }
-    }
-    
-    // حفظ جميع المطابقات المحتملة دفعة واحدة
-    if (potentialMatches.length > 0) {
-      await AdvertisementMatch.insertMany(potentialMatches);
-    }
-    
-    console.log(`✅ تم إنشاء ${potentialMatches.length} مطابقة محتملة جديدة`);
-    
-    // تنظيف المطابقات المكررة (للتأكد)
-    const dupeCheck = await cleanupDuplicateMatchesInternal();
-    console.log(`🧹 تم حذف ${dupeCheck.deletedCount} مطابقة مكررة أثناء التنظيف النهائي`);
-    
-    // 3. عرض المطابقات المعلقة
-    const { page = 1, limit = 10 } = req.query;
-    
-    // بناء فلتر للمطابقات المعلقة
-    const filter = { status: MatchStatus.PENDING };
-    
-    // الحصول على إجمالي عدد المطابقات
-    const total = await AdvertisementMatch.countDocuments(filter);
-    
-    // حساب التخطي والحد
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // جلب المطابقات
-    const matches = await AdvertisementMatch.find(filter)
-      .sort({ matchScore: -1, createdAt: -1 }) // ترتيب حسب درجة التطابق والأحدث
-      .skip(skip)
-      .limit(Number(limit))
-      .populate({
-        path: 'lostAdvertisementId',
-        select: 'category governorate ownerName itemNumber description images userId',
-        populate: { path: 'userId', select: 'fullName phoneNumber' }
-      })
-      .populate({
-        path: 'foundAdvertisementId',
-        select: 'category governorate ownerName itemNumber description images userId',
-        populate: { path: 'userId', select: 'fullName phoneNumber' }
-      });
-    
-    console.log(`🔍 تم العثور على ${matches.length} مطابقة معلقة`);
-
-    return res.status(200).json({
-      success: true,
-      message: `تم إنشاء ${potentialMatches.length} مطابقة محتملة جديدة`,
-      count: matches.length,
-      total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      data: matches
-    });
+    if (!requireAdmin(req, res)) return;
+    const { page, limit } = parsePaging(req);
+    return await listMatches(
+      res,
+      { status: MatchStatus.PENDING },
+      page,
+      limit,
+      { matchScore: 'desc' }
+    );
   } catch (error: any) {
-    console.error('❌ خطأ في تحديث وعرض المطابقات:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    console.error('خطأ في الحصول على المطابقات المعلقة:', error);
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// دالة داخلية لتنظيف المطابقات المكررة
-const cleanupDuplicateMatchesInternal = async () => {
-  // جلب جميع المطابقات
-  const allMatches = await AdvertisementMatch.find({});
-  
-  // تتبع المطابقات الفريدة
-  const uniqueMatchPairs = new Set<string>();
-  const duplicateIds: string[] = [];
-  
-  // تحديد المطابقات المكررة
-  for (const match of allMatches) {
-    // تخزين معرف المطابقة بترتيب ثابت
-    const lostId = match.lostAdvertisementId.toString();
-    const foundId = match.foundAdvertisementId.toString();
-    
-    // إنشاء معرف فريد باستخدام المعرفين، بغض النظر عن ترتيبهما
-    const matchPair = [lostId, foundId].sort().join('--');
-    
-    if (uniqueMatchPairs.has(matchPair)) {
-      // حفظ معرف المطابقة المكررة
-      duplicateIds.push(match._id.toString());
-    } else {
-      // تسجيل هذه المطابقة كمطابقة فريدة
-      uniqueMatchPairs.add(matchPair);
-    }
-  }
-  
-  // حذف المطابقات المكررة
-  const deleteResult = await AdvertisementMatch.deleteMany({
-    _id: { $in: duplicateIds }
-  });
-  
-  return {
-    uniqueMatchesCount: uniqueMatchPairs.size,
-    deletedCount: deleteResult.deletedCount,
-    deleteResult
-  };
-};
-
-// إضافة دالة تشابه النصوص (إذا لم تكن موجودة في هذا الملف)
-const calculateSimilarity = (str1: string, str2: string): number => {
-  if (!str1 || !str2) return 0;
-  
-  // تنظيف وتحويل النصوص لأحرف صغيرة
-  const a = str1.toLowerCase().replace(/\s+/g, ' ').trim();
-  const b = str2.toLowerCase().replace(/\s+/g, ' ').trim();
-  
-  // حساب تطابق أساسي
-  if (a === b) return 100;
-  if (a.includes(b) || b.includes(a)) return 80;
-  
-  // حساب عدد الكلمات المشتركة
-  const wordsA = a.split(' ');
-  const wordsB = b.split(' ');
-  
-  let matchCount = 0;
-  for (const word of wordsA) {
-    if (word.length > 2 && wordsB.includes(word)) {
-      matchCount++;
-    }
-  }
-  
-  const similarity = (matchCount * 2) / (wordsA.length + wordsB.length) * 100;
-  return Math.round(similarity);
-};
-
-// الحصول على جميع المطابقات
 export const getAllMatches = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
+    const { page, limit } = parsePaging(req);
 
-    const { status, page = 1, limit = 10 } = req.query;
+    const where: Prisma.AdvertisementMatchWhereInput = {};
+    const status = req.query.status as string | undefined;
 
-    // بناء الفلتر
-    const filter: any = {};
-    
     if (status) {
-      filter.status = status;
+      if (!Object.values(Status).includes(status as Status)) {
+        return res.status(400).json({ success: false, message: 'حالة غير صالحة' });
+      }
+      where.status = status as Status;
     }
 
-    // الحصول على إجمالي عدد المطابقات
-    const total = await AdvertisementMatch.countDocuments(filter);
-
-    // حساب التخطي والحد
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // جلب المطابقات
-    const matches = await AdvertisementMatch.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .populate({
-        path: 'lostAdvertisementId',
-        select: 'category governorate ownerName itemNumber description images userId',
-        populate: { path: 'userId', select: 'fullName phoneNumber' }
-      })
-      .populate({
-        path: 'foundAdvertisementId',
-        select: 'category governorate ownerName itemNumber description images userId',
-        populate: { path: 'userId', select: 'fullName phoneNumber' }
-      });
-
-    return res.status(200).json({
-      success: true,
-      count: matches.length,
-      total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      data: matches
-    });
+    return await listMatches(res, where, page, limit, { createdAt: 'desc' });
   } catch (error: any) {
     console.error('خطأ في الحصول على المطابقات:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// الموافقة على مطابقة
+/**
+ * الموافقة على مطابقة.
+ *
+ * علّة أُصلحت هنا: «إرسال الإشعار» كان `console.log` فحسب، ومع ذلك
+ * يُضبط `notificationSent = true`. أي أن صاحب المستمسك المفقود لم يكن
+ * يعلم أبدًا بالعثور عليه — وهو جوهر الخدمة كلها.
+ * الإشعار الآن يُنشأ فعليًا للطرفين، و`notificationSent` يعكس الحقيقة.
+ */
 export const approveMatch = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
 
     const { id } = req.params;
     const { notes } = req.body;
 
-    // البحث عن المطابقة
-    const match = await AdvertisementMatch.findById(id);
+    // تحديث شرطي ذرّي — يمنع معالجة نفس المطابقة مرتين من طلبين متزامنين
+    const updated = await prisma.advertisementMatch.updateMany({
+      where: { id, status: MatchStatus.PENDING },
+      data: {
+        status: MatchStatus.APPROVED,
+        approvedById: req.admin!.id,
+        approvedAt: new Date(),
+        ...(notes ? { notes } : {}),
+      },
+    });
 
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'المطابقة غير موجودة'
-      });
+    if (updated.count === 0) {
+      const existing = await prisma.advertisementMatch.findUnique({ where: { id } });
+      return existing
+        ? res.status(400).json({
+            success: false,
+            message: `هذه المطابقة تم معالجتها مسبقًا وحالتها الحالية: ${existing.status}`,
+          })
+        : res.status(404).json({ success: false, message: 'المطابقة غير موجودة' });
     }
 
-    // التحقق من حالة المطابقة
-    if (match.status !== MatchStatus.PENDING) {
-      return res.status(400).json({
-        success: false,
-        message: `هذه المطابقة تم معالجتها مسبقًا وحالتها الحالية: ${match.status}`
-      });
-    }
+    const match = await prisma.advertisementMatch.findUnique({
+      where: { id },
+      include: matchInclude,
+    });
 
-    // تحديث حالة المطابقة
-    match.status = MatchStatus.APPROVED;
-    match.approvedBy = req.admin._id;
-    match.approvedAt = new Date();
-    
-    if (notes) {
-      match.notes = notes;
-    }
-    
-    await match.save();
-
-    // إرسال إشعار للشخص الذي فقد العنصر
+    // إشعار الطرفين فعليًا
     try {
-      const lostAdvertisement = await Advertisement.findById(match.lostAdvertisementId);
-      
-      if (lostAdvertisement) {
-        // في الواقع، هنا سيتم إرسال إشعار للمستخدم
-        // سواء برسالة في التطبيق أو إشعار بالبريد الإلكتروني أو رسالة نصية
-        console.log(`✉️ إرسال إشعار للمستخدم ${lostAdvertisement.userId} بخصوص العثور على العنصر المفقود`);
-        
-        // تحديث حالة الإشعار
-        match.notificationSent = true;
-        match.notificationSentAt = new Date();
-        await match.save();
-      }
+      await notificationService.createNotifications([
+        {
+          userId: match!.lostAdvertisement.userId,
+          title: 'عُثر على مستمسك يطابق إعلانك',
+          body: 'راجع تفاصيل المطابقة في التطبيق وقدّم طلب تواصل مع من عثر عليه',
+          type: NotificationType.ADVERTISEMENT,
+          referenceId: match!.id,
+        },
+        {
+          userId: match!.foundAdvertisement.userId,
+          title: 'المستمسك الذي عثرت عليه يطابق إعلان مفقود',
+          body: 'شكرًا لك — سيتواصل معك صاحب المستمسك بعد موافقة الإدارة',
+          type: NotificationType.ADVERTISEMENT,
+          referenceId: match!.id,
+        },
+      ]);
+
+      await prisma.advertisementMatch.update({
+        where: { id },
+        data: { notificationSent: true, notificationSentAt: new Date() },
+      });
     } catch (notificationError) {
+      // لا يُضبط notificationSent عند الفشل — الحقل يعكس الواقع
       console.error('خطأ في إرسال الإشعار:', notificationError);
     }
 
     return res.status(200).json({
       success: true,
       message: 'تمت الموافقة على المطابقة بنجاح',
-      data: match
+      data: match,
     });
   } catch (error: any) {
     console.error('خطأ في الموافقة على المطابقة:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// رفض مطابقة
 export const rejectMatch = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
 
     const { id } = req.params;
     const { notes } = req.body;
 
-    // البحث عن المطابقة
-    const match = await AdvertisementMatch.findById(id);
+    const updated = await prisma.advertisementMatch.updateMany({
+      where: { id, status: MatchStatus.PENDING },
+      data: { status: MatchStatus.REJECTED, ...(notes ? { notes } : {}) },
+    });
 
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'المطابقة غير موجودة'
-      });
+    if (updated.count === 0) {
+      const existing = await prisma.advertisementMatch.findUnique({ where: { id } });
+      return existing
+        ? res.status(400).json({ success: false, message: 'هذه المطابقة تم معالجتها مسبقًا' })
+        : res.status(404).json({ success: false, message: 'المطابقة غير موجودة' });
     }
 
-    // التحقق من حالة المطابقة
-    if (match.status !== MatchStatus.PENDING) {
-      return res.status(400).json({
-        success: false,
-        message: 'هذه المطابقة تم معالجتها مسبقًا'
-      });
-    }
-
-    // تحديث حالة المطابقة
-    match.status = MatchStatus.REJECTED;
-    
-    if (notes) {
-      match.notes = notes;
-    }
-    
-    await match.save();
+    const match = await prisma.advertisementMatch.findUnique({
+      where: { id },
+      include: matchInclude,
+    });
 
     return res.status(200).json({
       success: true,
       message: 'تم رفض المطابقة بنجاح',
-      data: match
+      data: match,
     });
   } catch (error: any) {
     console.error('خطأ في رفض المطابقة:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// مسار لتشغيل المطابقة يدوياً على كل الإعلانات
 export const runMatchingForAll = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
 
-    // جلب جميع الإعلانات النشطة
-    const advertisements = await Advertisement.find({ isResolved: false });
-    console.log(`جاري البحث عن تطابقات لـ ${advertisements.length} إعلان`);
-
-    // تشغيل المطابقة لكل إعلان
-    const matchingPromises = advertisements.map(ad => 
-      findPotentialMatches(ad._id.toString())
-    );
-    
-    await Promise.all(matchingPromises);
-
-    // جلب نتائج المطابقة
-    const matches = await AdvertisementMatch.find({ status: MatchStatus.PENDING })
-      .populate({
-        path: 'lostAdvertisementId',
-        select: 'category governorate ownerName itemNumber description'
-      })
-      .populate({
-        path: 'foundAdvertisementId',
-        select: 'category governorate ownerName itemNumber description'
-      });
+    const created = await matchingService.runMatchingForAll();
 
     return res.status(200).json({
       success: true,
-      message: `تم العثور على ${matches.length} مطابقة محتملة`,
-      count: matches.length,
-      data: matches
+      message: `اكتملت المطابقة — ${created} مطابقة جديدة`,
+      data: { created },
     });
   } catch (error: any) {
     console.error('خطأ في تشغيل المطابقة:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// مسار لتشغيل المطابقة يدوياً على إعلان محدد
 export const runMatchingForOne = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
 
     const { advertisementId } = req.params;
-    
-    console.log(`جاري البحث عن تطابقات للإعلان: ${advertisementId}`);
-    
-    // تشغيل المطابقة
-    await findPotentialMatches(advertisementId)
-      .then(matches => {
-        return res.status(200).json({
-          success: true,
-          message: `تم العثور على ${matches.length} مطابقة محتملة للإعلان`,
-          count: matches.length,
-          data: matches
-        });
-      })
-      .catch(err => {
-        console.error('خطأ في تشغيل المطابقة:', err);
-        return res.status(500).json({
-          success: false,
-          message: 'حدث خطأ في الخادم',
-          error: err.message
-        });
-      });
-  } catch (error: any) {
-    console.error('خطأ في تشغيل المطابقة لإعلان واحد:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
+
+    const exists = await prisma.advertisement.findUnique({
+      where: { id: advertisementId },
+      select: { id: true },
     });
+
+    if (!exists) {
+      return res.status(404).json({ success: false, message: 'الإعلان غير موجود' });
+    }
+
+    const created = await matchingService.findPotentialMatches(advertisementId);
+
+    return res.status(200).json({
+      success: true,
+      message: `اكتملت المطابقة — ${created} مطابقة جديدة`,
+      data: { created },
+    });
+  } catch (error: any) {
+    console.error('خطأ في تشغيل المطابقة للإعلان:', error);
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// إضافة وظيفة لتنظيف المطابقات المكررة
+/**
+ * تنظيف المطابقات المكررة.
+ *
+ * أُبقي المسار للتوافق مع لوحة التحكم الحالية، لكنه صار بلا عمل:
+ * قيد `@@unique([lostAdvertisementId, foundAdvertisementId])` يمنع
+ * إنشاء التكرار من الأساس بدل تنظيفه بعد وقوعه.
+ */
 export const cleanupDuplicateMatches = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
 
-    // جلب جميع المطابقات
-    const allMatches = await AdvertisementMatch.find({});
-    
-    // تتبع المطابقات الفريدة
-    const uniqueMatchPairs = new Set<string>();
-    const duplicateIds = [];
-    
-    // تحديد المطابقات المكررة
-    for (const match of allMatches) {
-      const matchPair = `${match.lostAdvertisementId}-${match.foundAdvertisementId}`;
-      
-      if (uniqueMatchPairs.has(matchPair)) {
-        // مطابقة مكررة
-        duplicateIds.push(match._id.toString());
-      } else {
-        // مطابقة فريدة
-        uniqueMatchPairs.add(matchPair);
-      }
-    }
-    
-    // حذف المطابقات المكررة
-    const deleteResult = await AdvertisementMatch.deleteMany({
-      _id: { $in: duplicateIds }
-    });
-    
     return res.status(200).json({
       success: true,
-      message: `تم حذف ${deleteResult.deletedCount} مطابقة مكررة`,
-      uniqueMatchesCount: uniqueMatchPairs.size,
-      deletedCount: deleteResult.deletedCount
+      message: 'لا حاجة للتنظيف — قيد التفرّد في قاعدة البيانات يمنع المطابقات المكررة',
+      removed: 0,
     });
   } catch (error: any) {
-    console.error('خطأ في تنظيف المطابقات المكررة:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    console.error('خطأ في تنظيف المطابقات:', error);
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// الحصول على سجل المطابقات السابقة
+/** سجل المطابقات المعالَجة (المعتمدة والمرفوضة والمكتملة) */
 export const getMatchHistory = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
+    const { page, limit } = parsePaging(req);
 
-    const { status, page = 1, limit = 10 } = req.query;
-
-    // بناء فلتر البحث
-    const filter: any = {};
-    
-    // فلترة حسب الحالة
-    if (status && ['approved', 'rejected'].includes(status as string)) {
-      filter.status = status;
-    } else {
-      // بدون فلتر، نعرض المطابقات المعتمدة والمرفوضة (لكن ليس المعلقة)
-      filter.status = { $in: ['approved', 'rejected'] };
-    }
-
-    // الحصول على إجمالي عدد المطابقات
-    const total = await AdvertisementMatch.countDocuments(filter);
-
-    // حساب التخطي والحد
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // جلب المطابقات
-    const matches = await AdvertisementMatch.find(filter)
-      .sort({ updatedAt: -1 }) // ترتيب حسب تاريخ التحديث (تاريخ الموافقة/الرفض)
-      .skip(skip)
-      .limit(Number(limit))
-      .populate({
-        path: 'lostAdvertisementId',
-        select: 'category governorate ownerName itemNumber description images userId',
-        populate: { path: 'userId', select: 'fullName phoneNumber' }
-      })
-      .populate({
-        path: 'foundAdvertisementId',
-        select: 'category governorate ownerName itemNumber description images userId',
-        populate: { path: 'userId', select: 'fullName phoneNumber' }
-      })
-      .populate('approvedBy', 'username');
-
-    return res.status(200).json({
-      success: true,
-      count: matches.length,
-      total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      data: matches
-    });
+    return await listMatches(
+      res,
+      { status: { not: MatchStatus.PENDING } },
+      page,
+      limit,
+      { approvedAt: 'desc' }
+    );
   } catch (error: any) {
     console.error('خطأ في الحصول على سجل المطابقات:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// إضافة مجموعة من المطابقات المحتملة دفعة واحدة
+/**
+ * إنشاء مطابقات يدوية جماعية.
+ * يتحقق من وجود الإعلانين ومن أن أنواعهما متقابلة قبل الإنشاء.
+ */
 export const bulkCreateMatches = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
+    if (!requireAdmin(req, res)) return;
+
+    const { matches } = req.body;
+
+    if (!Array.isArray(matches) || matches.length === 0) {
+      return res.status(400).json({
         success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
+        message: 'يجب توفير مصفوفة matches غير فارغة',
       });
     }
 
-    const { matches } = req.body;
-    
-    if (!matches || !Array.isArray(matches) || matches.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'لم يتم توفير مطابقات صالحة'
-      });
-    }
-    
-    console.log(`🔍 إضافة ${matches.length} مطابقة محتملة جديدة...`);
-    
-    // التحقق من المطابقات المكررة
-    const uniqueMatches: IMatch[] = [];
-    const uniqueKeys = new Set<string>();
-    
-    // معالجة كل مطابقة وإضافتها إلى المصفوفة النهائية
-    for (const match of matches) {
-      const { lostAdvertisementId, foundAdvertisementId, matchScore, matchingFields } = match;
-      
-      // التحقق من توفر المعرفات الضرورية
+    const valid: Prisma.AdvertisementMatchCreateManyInput[] = [];
+    const skipped: string[] = [];
+
+    for (const item of matches) {
+      const { lostAdvertisementId, foundAdvertisementId, matchScore, notes } = item ?? {};
+
       if (!lostAdvertisementId || !foundAdvertisementId) {
-        console.warn('تم تخطي مطابقة غير صالحة - معرفات مفقودة');
+        skipped.push('معرّفا الإعلانين مطلوبان');
         continue;
       }
-      
-      // إنشاء مفتاح فريد للتحقق من التكرار
-      const pairKey = `${lostAdvertisementId}:${foundAdvertisementId}`;
-      const reversePairKey = `${foundAdvertisementId}:${lostAdvertisementId}`;
-      
-      if (uniqueKeys.has(pairKey) || uniqueKeys.has(reversePairKey)) {
-        console.log(`تم تخطي مطابقة مكررة: ${pairKey}`);
+
+      const [lost, found] = await Promise.all([
+        prisma.advertisement.findUnique({
+          where: { id: lostAdvertisementId },
+          select: { id: true, type: true },
+        }),
+        prisma.advertisement.findUnique({
+          where: { id: foundAdvertisementId },
+          select: { id: true, type: true },
+        }),
+      ]);
+
+      if (!lost || !found) {
+        skipped.push(`إعلان غير موجود: ${lostAdvertisementId} / ${foundAdvertisementId}`);
         continue;
       }
-      
-      // إضافة المطابقة الفريدة إلى المصفوفة
-      uniqueMatches.push({
+
+      if (lost.type !== 'lost' || found.type !== 'found') {
+        skipped.push(`نوعا الإعلانين غير متقابلين: ${lost.id} / ${found.id}`);
+        continue;
+      }
+
+      valid.push({
         lostAdvertisementId,
         foundAdvertisementId,
-        matchScore: matchScore || 0,
-        matchingFields: matchingFields || [],
+        matchScore: Number(matchScore) || 100, // مطابقة يدوية من مشرف
+        matchingFields: ['manual'],
         status: MatchStatus.PENDING,
-        notificationSent: false
+        notes: notes ?? 'مطابقة يدوية من الإدارة',
       });
     }
-    
-    // التحقق من وجود مطابقات فريدة
-    if (uniqueMatches.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: 'لا توجد مطابقات فريدة للإضافة',
-        addedCount: 0
-      });
-    }
-    
-    // التحقق أولاً من المطابقات الموجودة بالفعل في قاعدة البيانات
-    const existingMatches = await Promise.all(
-      uniqueMatches.map(match => 
-        AdvertisementMatch.findOne({
-          $or: [
-            { 
-              lostAdvertisementId: match.lostAdvertisementId, 
-              foundAdvertisementId: match.foundAdvertisementId 
-            },
-            { 
-              lostAdvertisementId: match.foundAdvertisementId, 
-              foundAdvertisementId: match.lostAdvertisementId 
-            }
-          ]
-        })
-      )
-    );
-    
-    // تصفية المطابقات التي لا توجد بالفعل في قاعدة البيانات
-    const newMatches = uniqueMatches.filter((_, index) => !existingMatches[index]);
-    
-    if (newMatches.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: 'جميع المطابقات موجودة بالفعل في قاعدة البيانات',
-        addedCount: 0
-      });
-    }
-    
-    // إضافة المطابقات الجديدة إلى قاعدة البيانات
-    console.log(`✨ إضافة ${newMatches.length} مطابقة جديدة إلى قاعدة البيانات...`);
-    const result = await AdvertisementMatch.insertMany(newMatches);
-    
+
+    const result = valid.length
+      ? await prisma.advertisementMatch.createMany({ data: valid, skipDuplicates: true })
+      : { count: 0 };
+
     return res.status(201).json({
       success: true,
-      message: `تمت إضافة ${result.length} مطابقة جديدة بنجاح`,
-      addedCount: result.length,
-      totalSubmitted: matches.length
+      message: `أُنشئت ${result.count} مطابقة`,
+      data: { created: result.count, skipped },
     });
   } catch (error: any) {
-    console.error('❌ خطأ في إضافة المطابقات:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم أثناء إضافة المطابقات',
-      error: error.message
-    });
+    console.error('خطأ في إنشاء المطابقات الجماعية:', error);
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
-}; 
+};

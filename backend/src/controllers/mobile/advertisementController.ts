@@ -1,486 +1,419 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
-import Advertisement, { AdvertisementType, IAdvertisement, ItemCategory, Governorate } from '../../models/mobile/Advertisement';
+import {
+  Prisma,
+  AdvertisementType as AdType,
+  ItemCategory as Category,
+  Governorate as Gov,
+} from '@prisma/client';
+import prisma from '../../config/prisma';
+import {
+  AdvertisementType,
+  AdvertisementStatus,
+  ItemCategory,
+  Governorate,
+} from '../../models/mobile/Advertisement';
 import { uploadImages } from '../../services/common/fileUploadService';
 import { AuthRequest } from '../../types/express';
 import { checkForMatches } from '../../services/common/matchingService';
 
-enum AdvertisementStatus {
-  PENDING = 'pending',
-  ACTIVE = 'active',
-  RESOLVED = 'resolved',
-  REJECTED = 'rejected'
-}
+const HIDDEN_PHONE = '********* (متاح عند طلب الاتصال)';
+
+const ownerSelect = {
+  user: { select: { id: true, fullName: true, phoneNumber: true } },
+} satisfies Prisma.AdvertisementInclude;
+
+type AdWithOwner = Prisma.AdvertisementGetPayload<{ include: typeof ownerSelect }>;
+
+const requireUser = (req: Request, res: Response): string | null => {
+  const userId = (req as AuthRequest).user?.id;
+  if (!userId) {
+    res.status(401).json({ success: false, message: 'غير مصرح به. يرجى تسجيل الدخول' });
+    return null;
+  }
+  return userId;
+};
+
+/** إخفاء أرقام التواصل عن غير صاحب الإعلان */
+const hideContact = (ad: AdWithOwner, viewerId?: string): AdWithOwner => {
+  if (!ad.hideContactInfo || ad.userId === viewerId) return ad;
+  return {
+    ...ad,
+    contactPhone: HIDDEN_PHONE,
+    user: { ...ad.user, phoneNumber: HIDDEN_PHONE },
+  };
+};
+
+/**
+ * الحقول التي يملك المستخدم كتابتها.
+ *
+ * علّة أمنية أُصلحت هنا: `createAdvertisement` كان ينشر `...req.body`
+ * و`updateAdvertisement` يمرّر `req.body` كاملًا إلى التحديث — أي أن
+ * المستخدم يستطيع إرسال `isApproved: true` أو `status: 'approved'`
+ * فيعتمد إعلانه بنفسه ويتجاوز مراجعة الإدارة كليًا.
+ */
+const USER_WRITABLE = [
+  'type',
+  'category',
+  'governorate',
+  'ownerName',
+  'itemNumber',
+  'description',
+  'contactPhone',
+  'hideContactInfo',
+] as const;
+
+const pickWritable = (body: any): Record<string, any> => {
+  const data: Record<string, any> = {};
+  for (const field of USER_WRITABLE) {
+    if (body?.[field] !== undefined) data[field] = body[field];
+  }
+  return data;
+};
+
+const buildFilters = (query: Request['query']): Prisma.AdvertisementWhereInput => {
+  const where: Prisma.AdvertisementWhereInput = {};
+  const { type, category, governorate, isResolved } = query as Record<string, string | undefined>;
+
+  if (type && Object.values(AdType).includes(type as AdType)) where.type = type as AdType;
+  if (category && Object.values(Category).includes(category as Category))
+    where.category = category as Category;
+  if (governorate && Object.values(Gov).includes(governorate as Gov))
+    where.governorate = governorate as Gov;
+  if (isResolved !== undefined) where.isResolved = isResolved === 'true';
+
+  return where;
+};
 
 export const createAdvertisement = async (req: Request, res: Response) => {
   try {
-    const authReq = req as AuthRequest;
-    if (!authReq.user || !authReq.user.id) {
-      return res.status(401).json({
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const data = pickWritable(req.body);
+
+    if (!data.type || !data.category || !data.governorate || !data.description || !data.contactPhone) {
+      return res.status(400).json({
         success: false,
-        message: 'غير مصرح به. يرجى تسجيل الدخول'
+        message: 'النوع والفئة والمحافظة والوصف ورقم الاتصال حقول مطلوبة',
       });
     }
 
-    const userId = authReq.user.id;
+    const files = req.files as Express.Multer.File[] | undefined;
+    const images = files?.length ? await uploadImages(files) : [];
 
-    // التحقق من وجود الصور
-    const files = req.files as Express.Multer.File[];
-    const imagePaths: string[] = [];
-
-    if (files && files.length > 0) {
-      // تحميل الصور
-      const uploadedImages = await uploadImages(files);
-      imagePaths.push(...uploadedImages);
-    }
-
-    // إنشاء الإعلان الجديد
-    const advertisement = new Advertisement({
-      ...req.body,
-      images: imagePaths,
-      userId: userId
+    const advertisement = await prisma.advertisement.create({
+      data: {
+        ...(data as Prisma.AdvertisementCreateInput),
+        images,
+        user: { connect: { id: userId } },
+      },
+      include: ownerSelect,
     });
 
-    await advertisement.save();
+    // الإعلان يُنشأ غير معتمد، فالمطابقة تنتظر موافقة المشرف
+    // (تُستدعى من approveAdvertisement) — الاستدعاء هنا للاكتمال فقط.
+    checkForMatches(advertisement.id);
 
-    // استدعاء خدمة المطابقة
-    await checkForMatches(advertisement._id.toString());
-
-    return res.status(201).json({
-      success: true,
-      data: advertisement
-    });
+    return res.status(201).json({ success: true, data: advertisement });
   } catch (error: any) {
     console.error('Error creating advertisement:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'فشل في إنشاء الإعلان',
-      error: error.message || 'خطأ غير معروف'
-    });
+    return res.status(500).json({ success: false, message: 'فشل في إنشاء الإعلان' });
   }
 };
 
 export const getAdvertisements = async (req: Request, res: Response) => {
   try {
-    const { 
-      type, 
-      category, 
-      governorate, 
-      isResolved, 
-      page = 1, 
-      limit = 10 
-    } = req.query;
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
 
-    // بناء فلتر البحث
-    const filter: any = {};
-    
-    if (type) filter.type = type;
-    if (category) filter.category = category;
-    if (governorate) filter.governorate = governorate;
-    if (isResolved !== undefined) filter.isResolved = isResolved === 'true';
-    
-    // فقط الإعلانات المعتمدة
-    filter.isApproved = true;
+    const where: Prisma.AdvertisementWhereInput = {
+      ...buildFilters(req.query),
+      isApproved: true,
+      isArchived: false,
+    };
 
-    // الحصول على إجمالي عدد الإعلانات
-    const total = await Advertisement.countDocuments(filter);
+    const [total, advertisements] = await prisma.$transaction([
+      prisma.advertisement.count({ where }),
+      prisma.advertisement.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: ownerSelect,
+      }),
+    ]);
 
-    // حساب التخطي والحد
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // جلب الإعلانات مع التصفية والترتيب حسب الأحدث
-    let advertisements = await Advertisement.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .populate('userId', 'fullName phoneNumber');
-
-    // إخفاء أرقام التواصل للإعلانات
-    const authReq = req as AuthRequest;
-    const sanitizedAds = advertisements.map(ad => {
-      const adObj = ad.toObject();
-      
-      // إخفاء رقم التواصل إذا كان مطلوبًا
-      if (ad.hideContactInfo && (!authReq.user || ad.userId.toString() !== authReq.user.id)) {
-        adObj.contactPhone = "********* (متاح عند طلب الاتصال)";
-        if (adObj.userId && adObj.userId.phoneNumber) {
-          adObj.userId.phoneNumber = "********* (متاح عند طلب الاتصال)";
-        }
-      }
-      
-      return adObj;
-    });
+    const viewerId = (req as AuthRequest).user?.id;
+    const data = advertisements.map((ad) => hideContact(ad, viewerId));
 
     return res.status(200).json({
       success: true,
-      count: sanitizedAds.length,
+      count: data.length,
       total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      data: sanitizedAds
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      data,
     });
   } catch (error: any) {
     console.error('خطأ في الحصول على الإعلانات:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
 export const getAdvertisementById = async (req: Request, res: Response) => {
   try {
-    const advertisement = await Advertisement.findById(req.params.id)
-      .populate('userId', 'fullName phoneNumber');
+    const advertisement = await prisma.advertisement.findUnique({
+      where: { id: req.params.id },
+      include: ownerSelect,
+    });
 
     if (!advertisement) {
-      return res.status(404).json({
-        success: false,
-        message: 'لم يتم العثور على الإعلان'
-      });
+      return res.status(404).json({ success: false, message: 'لم يتم العثور على الإعلان' });
     }
 
-    // إخفاء رقم التواصل إذا كان مطلوبًا
-    const authReq = req as AuthRequest;
-    const adObj = advertisement.toObject();
-    
-    if (advertisement.hideContactInfo && (!authReq.user || advertisement.userId.toString() !== authReq.user.id)) {
-      adObj.contactPhone = "********* (متاح عند طلب الاتصال)";
-      if (adObj.userId && adObj.userId.phoneNumber) {
-        adObj.userId.phoneNumber = "********* (متاح عند طلب الاتصال)";
-      }
+    const viewerId = (req as AuthRequest).user?.id;
+
+    // إعلان غير معتمد لا يراه إلا صاحبه — سابقًا كان أي معرّف يكشف
+    // أي إعلان بما فيه المرفوض وما ينتظر المراجعة
+    if (!advertisement.isApproved && advertisement.userId !== viewerId) {
+      return res.status(404).json({ success: false, message: 'لم يتم العثور على الإعلان' });
     }
 
     return res.status(200).json({
       success: true,
-      data: adObj
+      data: hideContact(advertisement, viewerId),
     });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: 'فشل في جلب الإعلان',
-      error: error.message || 'خطأ غير معروف'
-    });
+    console.error('فشل في جلب الإعلان:', error);
+    return res.status(500).json({ success: false, message: 'فشل في جلب الإعلان' });
   }
 };
 
 export const getUserAdvertisements = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يرجى تسجيل الدخول'
-      });
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+    const status = req.query.status as string | undefined;
+
+    const where: Prisma.AdvertisementWhereInput = { userId };
+    if (status && Object.values(AdvertisementStatus).includes(status as any)) {
+      where.status = status as any;
     }
 
-    const { page = 1, limit = 10, status } = req.query;
-
-    // بناء الفلتر - عرض جميع إعلانات المستخدم بما فيها التي تنتظر الموافقة
-    const filter: any = { userId: req.user._id };
-    
-    if (status) {
-      filter.status = status;
-    }
-
-    // الحصول على إجمالي عدد الإعلانات
-    const total = await Advertisement.countDocuments(filter);
-
-    // حساب التخطي والحد
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // جلب إعلانات المستخدم مع الترتيب حسب الأحدث
-    const advertisements = await Advertisement.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
+    const [total, advertisements] = await prisma.$transaction([
+      prisma.advertisement.count({ where }),
+      prisma.advertisement.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
 
     return res.status(200).json({
       success: true,
       count: advertisements.length,
       total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      data: advertisements
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      data: advertisements,
     });
   } catch (error: any) {
     console.error('خطأ في الحصول على إعلانات المستخدم:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
+};
+
+/** يتحقق من ملكية الإعلان ويعيده، أو يردّ بالخطأ المناسب */
+const findOwnedAd = async (id: string, userId: string, res: Response) => {
+  const ad = await prisma.advertisement.findUnique({ where: { id } });
+
+  if (!ad) {
+    res.status(404).json({ success: false, message: 'لم يتم العثور على الإعلان' });
+    return null;
+  }
+
+  if (ad.userId !== userId) {
+    res.status(403).json({
+      success: false,
+      message: 'لا يمكن تعديل إعلان ينتمي لمستخدم آخر',
+    });
+    return null;
+  }
+
+  return ad;
 };
 
 export const updateAdvertisement = async (req: Request, res: Response) => {
   try {
-    const authReq = req as AuthRequest;
-    if (!authReq.user || !authReq.user.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يرجى تسجيل الدخول'
-      });
+    const userId = requireUser(req, res);
+    if (!userId) return;
+
+    const existing = await findOwnedAd(req.params.id, userId, res);
+    if (!existing) return;
+
+    const data = pickWritable(req.body);
+
+    const files = req.files as Express.Multer.File[] | undefined;
+    if (files?.length) {
+      const newImages = await uploadImages(files);
+      data.images = [...existing.images, ...newImages];
     }
 
-    let advertisement = await Advertisement.findById(req.params.id);
-
-    if (!advertisement) {
-      return res.status(404).json({
-        success: false,
-        message: 'لم يتم العثور على الإعلان'
-      });
-    }
-
-    // التحقق من أن الإعلان ينتمي للمستخدم
-    if (advertisement.userId.toString() !== authReq.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'لا يمكن تعديل إعلان ينتمي لمستخدم آخر'
-      });
-    }
-
-    // معالجة الصور الجديدة إذا وجدت
-    if (req.files && (req.files as Express.Multer.File[]).length > 0) {
-      const files = req.files as Express.Multer.File[];
-      const newImagePaths = await uploadImages(files);
-      
-      // دمج الصور الجديدة مع الصور الحالية
-      const updatedImages = [...advertisement.images, ...newImagePaths];
-      req.body.images = updatedImages;
-    }
-
-    // تحديث الإعلان
-    advertisement = await Advertisement.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
+    // أي تعديل يُعيد الإعلان إلى المراجعة — وإلا أمكن نشر محتوى معتمد
+    // ثم استبداله بمحتوى آخر بعد الموافقة
+    const advertisement = await prisma.advertisement.update({
+      where: { id: req.params.id },
+      data: {
+        ...data,
+        isApproved: false,
+        status: AdvertisementStatus.PENDING,
+        approvedAt: null,
+        approvedById: null,
+      },
+      include: ownerSelect,
     });
 
-    // استدعاء خدمة المطابقة في حالة تحديث الإعلان
-    await checkForMatches(advertisement._id.toString());
-
-    return res.status(200).json({
-      success: true,
-      data: advertisement
-    });
+    return res.status(200).json({ success: true, data: advertisement });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: 'فشل في تحديث الإعلان',
-      error: error.message || 'خطأ غير معروف'
-    });
+    console.error('فشل في تحديث الإعلان:', error);
+    return res.status(500).json({ success: false, message: 'فشل في تحديث الإعلان' });
   }
 };
 
 export const deleteAdvertisement = async (req: Request, res: Response) => {
   try {
-    const authReq = req as AuthRequest;
-    if (!authReq.user || !authReq.user.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يرجى تسجيل الدخول'
-      });
-    }
+    const userId = requireUser(req, res);
+    if (!userId) return;
 
-    const advertisement = await Advertisement.findById(req.params.id);
+    const existing = await findOwnedAd(req.params.id, userId, res);
+    if (!existing) return;
 
-    if (!advertisement) {
-      return res.status(404).json({
-        success: false,
-        message: 'لم يتم العثور على الإعلان'
-      });
-    }
+    await prisma.advertisement.delete({ where: { id: req.params.id } });
 
-    // التحقق من أن الإعلان ينتمي للمستخدم
-    if (advertisement.userId.toString() !== authReq.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'لا يمكن حذف إعلان ينتمي لمستخدم آخر'
-      });
-    }
-
-    await Advertisement.findByIdAndDelete(req.params.id);
-
-    return res.status(200).json({
-      success: true,
-      message: 'تم حذف الإعلان بنجاح'
-    });
+    return res.status(200).json({ success: true, message: 'تم حذف الإعلان بنجاح' });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: 'فشل في حذف الإعلان',
-      error: error.message || 'خطأ غير معروف'
-    });
+    console.error('فشل في حذف الإعلان:', error);
+    return res.status(500).json({ success: false, message: 'فشل في حذف الإعلان' });
   }
 };
 
 export const markAsResolved = async (req: Request, res: Response) => {
   try {
-    const authReq = req as AuthRequest;
-    if (!authReq.user || !authReq.user.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يرجى تسجيل الدخول'
-      });
-    }
+    const userId = requireUser(req, res);
+    if (!userId) return;
 
-    let advertisement = await Advertisement.findById(req.params.id);
+    const existing = await findOwnedAd(req.params.id, userId, res);
+    if (!existing) return;
 
-    if (!advertisement) {
-      return res.status(404).json({
-        success: false,
-        message: 'لم يتم العثور على الإعلان'
-      });
-    }
+    const isResolved = req.body.isResolved === true || req.body.isResolved === 'true';
 
-    // التحقق من أن الإعلان ينتمي للمستخدم
-    if (advertisement.userId.toString() !== authReq.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'لا يمكن تحديث حالة إعلان ينتمي لمستخدم آخر'
-      });
-    }
-
-    // تحديث حالة الإعلان
-    const isResolved = req.body.isResolved === true;
-    
-    advertisement = await Advertisement.findByIdAndUpdate(req.params.id, { 
-      status: isResolved ? AdvertisementStatus.RESOLVED : AdvertisementStatus.APPROVED,
-      isResolved: isResolved,
-      resolvedAt: isResolved ? new Date() : null
-    }, {
-      new: true,
-      runValidators: true
+    const advertisement = await prisma.advertisement.update({
+      where: { id: req.params.id },
+      data: {
+        isResolved,
+        status: isResolved ? AdvertisementStatus.RESOLVED : AdvertisementStatus.APPROVED,
+        resolvedAt: isResolved ? new Date() : null,
+      },
+      include: ownerSelect,
     });
-
-    const message = isResolved 
-      ? 'تم تحديث حالة الإعلان إلى "تم الحل" بنجاح' 
-      : 'تم إعادة فتح الإعلان بنجاح';
 
     return res.status(200).json({
       success: true,
-      message: message,
-      data: advertisement
+      message: isResolved
+        ? 'تم تحديث حالة الإعلان إلى "تم الحل" بنجاح'
+        : 'تم إعادة فتح الإعلان بنجاح',
+      data: advertisement,
     });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: 'فشل في تحديث حالة الإعلان',
-      error: error.message || 'خطأ غير معروف'
-    });
+    console.error('فشل في تحديث حالة الإعلان:', error);
+    return res.status(500).json({ success: false, message: 'فشل في تحديث حالة الإعلان' });
   }
 };
 
-export const getConstants = async (req: Request, res: Response) => {
-  try {
-    const constants = {
-      types: Object.values(AdvertisementType).map(type => ({
-        value: type,
-        label: type === 'lost' ? 'مفقود' : 'موجود'
-      })),
-      categories: Object.values(ItemCategory).map(category => {
-        let label = '';
-        switch(category) {
-          case 'passport': label = 'جواز سفر'; break;
-          case 'national_id': label = 'بطاقة وطنية'; break;
-          case 'driving_license': label = 'اجازة سوق'; break;
-          case 'other': label = 'أخرى'; break;
-        }
-        return { value: category, label };
-      }),
-      governorates: Object.values(Governorate).map(gov => {
-        // تحويل قيم المحافظات إلى أسماء عربية
-        let label = '';
-        switch(gov) {
-          case 'baghdad': label = 'بغداد'; break;
-          case 'basra': label = 'البصرة'; break;
-          case 'erbil': label = 'أربيل'; break;
-          case 'sulaymaniyah': label = 'السليمانية'; break;
-          case 'duhok': label = 'دهوك'; break;
-          case 'nineveh': label = 'نينوى'; break;
-          case 'kirkuk': label = 'كركوك'; break;
-          case 'diyala': label = 'ديالى'; break;
-          case 'anbar': label = 'الأنبار'; break;
-          case 'babil': label = 'بابل'; break;
-          case 'karbala': label = 'كربلاء'; break;
-          case 'najaf': label = 'النجف'; break;
-          case 'wasit': label = 'واسط'; break;
-          case 'muthanna': label = 'المثنى'; break;
-          case 'diwaniyah': label = 'الديوانية'; break;
-          case 'maysan': label = 'ميسان'; break;
-          case 'dhiqar': label = 'ذي قار'; break;
-          case 'saladin': label = 'صلاح الدين'; break;
-          default: label = gov;
-        }
-        return { value: gov, label };
-      })
-    };
+/** التسميات العربية للتعدادات — يستهلكها تطبيق الجوال لبناء القوائم */
+const TYPE_LABELS: Record<string, string> = { lost: 'مفقود', found: 'موجود' };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  passport: 'جواز سفر',
+  national_id: 'بطاقة وطنية',
+  driving_license: 'اجازة سوق',
+  other: 'أخرى',
+};
+
+const GOVERNORATE_LABELS: Record<string, string> = {
+  baghdad: 'بغداد',
+  basra: 'البصرة',
+  erbil: 'أربيل',
+  sulaymaniyah: 'السليمانية',
+  duhok: 'دهوك',
+  nineveh: 'نينوى',
+  kirkuk: 'كركوك',
+  diyala: 'ديالى',
+  anbar: 'الأنبار',
+  babil: 'بابل',
+  karbala: 'كربلاء',
+  najaf: 'النجف',
+  wasit: 'واسط',
+  muthanna: 'المثنى',
+  diwaniyah: 'الديوانية',
+  maysan: 'ميسان',
+  dhiqar: 'ذي قار',
+  saladin: 'صلاح الدين',
+};
+
+const toOptions = (values: string[], labels: Record<string, string>) =>
+  values.map((value) => ({ value, label: labels[value] ?? value }));
+
+export const getConstants = async (_req: Request, res: Response) => {
+  try {
     return res.status(200).json({
       success: true,
-      data: constants
+      data: {
+        types: toOptions(Object.values(AdvertisementType), TYPE_LABELS),
+        categories: toOptions(Object.values(ItemCategory), CATEGORY_LABELS),
+        governorates: toOptions(Object.values(Governorate), GOVERNORATE_LABELS),
+      },
     });
   } catch (error) {
     console.error('خطأ في الحصول على القيم الثابتة:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم'
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
 export const removeImage = async (req: Request, res: Response) => {
   try {
-    const authReq = req as AuthRequest;
-    if (!authReq.user || !authReq.user.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يرجى تسجيل الدخول'
-      });
-    }
+    const userId = requireUser(req, res);
+    if (!userId) return;
 
-    const { id } = req.params;
     const { imageUrl } = req.body;
 
     if (!imageUrl) {
       return res.status(400).json({
         success: false,
-        message: 'يرجى تقديم رابط الصورة المراد حذفها'
+        message: 'يرجى تقديم رابط الصورة المراد حذفها',
       });
     }
 
-    // البحث عن الإعلان
-    const advertisement = await Advertisement.findById(id);
+    const existing = await findOwnedAd(req.params.id, userId, res);
+    if (!existing) return;
 
-    if (!advertisement) {
-      return res.status(404).json({
-        success: false,
-        message: 'لم يتم العثور على الإعلان'
-      });
-    }
-
-    // التحقق من أن الإعلان ينتمي للمستخدم
-    if (advertisement.userId.toString() !== authReq.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'لا يمكن تعديل إعلان ينتمي لمستخدم آخر'
-      });
-    }
-
-    // حذف الصورة من المصفوفة
-    advertisement.images = advertisement.images.filter(img => img !== imageUrl);
-    await advertisement.save();
+    const advertisement = await prisma.advertisement.update({
+      where: { id: req.params.id },
+      data: { images: existing.images.filter((img) => img !== imageUrl) },
+      include: ownerSelect,
+    });
 
     return res.status(200).json({
       success: true,
       message: 'تم حذف الصورة بنجاح',
-      data: advertisement
+      data: advertisement,
     });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: 'فشل في حذف الصورة',
-      error: error.message || 'خطأ غير معروف'
-    });
+    console.error('فشل في حذف الصورة:', error);
+    return res.status(500).json({ success: false, message: 'فشل في حذف الصورة' });
   }
-}; 
+};

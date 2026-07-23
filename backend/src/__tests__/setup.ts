@@ -1,69 +1,51 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import prisma from '../config/prisma';
 
-// Global variable for server
-let mongoServer: MongoMemoryServer;
+/**
+ * تهيئة بيئة الاختبار.
+ *
+ * كانت تعتمد على `mongodb-memory-server`. مع Postgres لا يوجد مكافئ داخل
+ * الذاكرة، فالاختبارات تعمل على قاعدة بيانات حقيقية منفصلة:
+ *
+ *   docker exec ms-bg-postgres createdb -U msbg ms_main_db_test
+ *   DATABASE_URL=...ms_main_db_test npx prisma migrate deploy
+ *
+ * التنظيف بين الاختبارات بـ TRUNCATE ... CASCADE — أسرع من الحذف صفًا صفًا
+ * ويحافظ على البنية والفهارس.
+ */
 
-// Load environment variables
 dotenv.config();
 
-// Before all tests
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_secret_at_least_32_characters_x';
+process.env.JWT_EXPIRES_IN = '1h';
+process.env.ADMIN_USERNAME = 'admin';
+process.env.ADMIN_PASSWORD = 'admin';
+process.env.DEMO_MODE = 'false';
+
+/** كل الجداول عدا سجل ترحيلات Prisma */
+const TABLES = [
+  'points_entries',
+  'notifications',
+  'favorites',
+  'contact_requests',
+  'advertisement_matches',
+  'advertisements',
+  'otps',
+  'users',
+  'admins',
+];
+
 beforeAll(async () => {
-  try {
-    // Set test environment variables
-    process.env.NODE_ENV = 'test';
-    process.env.JWT_SECRET = 'test_secret';
-    process.env.JWT_EXPIRES_IN = '1h';
-    process.env.ADMIN_USERNAME = 'admin';
-    process.env.ADMIN_PASSWORD = 'admin';
-    
-    // Create MongoDB memory server
-    mongoServer = await MongoMemoryServer.create();
-    const mongoUri = mongoServer.getUri();
-    
-    console.log(`🔄 Connecting to test database: ${mongoUri}`);
-    
-    // Connect to test database
-    await mongoose.connect(mongoUri);
-    console.log('✅ Connected to test database successfully');
-  } catch (error) {
-    console.error('❌ Error setting up test environment:', error);
-    throw error;
-  }
+  await prisma.$connect();
 });
 
-// After all tests
-afterAll(async () => {
-  try {
-    // Disconnect from database
-    if (mongoose.connection.readyState) {
-      await mongoose.connection.close();
-      console.log('✅ Disconnected from database');
-    }
-    
-    // Stop MongoDB server
-    if (mongoServer) {
-      await mongoServer.stop();
-      console.log('✅ Stopped MongoDB memory server');
-    }
-  } catch (error) {
-    console.error('❌ Error cleaning up test environment:', error);
-  }
-});
-
-// After each test
 afterEach(async () => {
-  // Clean any temporary data that might affect other tests
-  try {
-    const collections = mongoose.connection.collections;
-    for (const key in collections) {
-      const collection = collections[key];
-      // Delete data while keeping indexes
-      await collection.deleteMany({});
-    }
-    console.log('🧹 Cleaned database after test');
-  } catch (error) {
-    console.error('❌ Error cleaning database:', error);
-  }
-}); 
+  await prisma.$executeRawUnsafe(
+    `TRUNCATE TABLE ${TABLES.map((t) => `"${t}"`).join(', ')} RESTART IDENTITY CASCADE`
+  );
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});

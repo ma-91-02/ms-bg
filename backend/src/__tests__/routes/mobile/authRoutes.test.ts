@@ -1,129 +1,115 @@
 import request from 'supertest';
-import mongoose from 'mongoose';
-import User from '../../../models/mobile/User';
-import app from '../../../index';
-import bcrypt from 'bcryptjs';
-import { generateOTP } from '../../../services/common/smsService';
+import app from '../../../app';
+import prisma from '../../../config/prisma';
+import { hashPassword } from '../../../services/common/userService';
 
-console.log('⚠️ Current environment:', process.env.NODE_ENV);
-if (process.env.NODE_ENV !== 'test') {
-  console.log('⚠️ Forcing test environment');
-  process.env.NODE_ENV = 'test';
-}
+describe('مصادقة تطبيق الجوال', () => {
+  const phoneNumber = '+9647701234567';
+  const password = 'Password123';
 
-console.log('�� Checking if routes are registered in auth test:');
-if (app._router) {
-  app._router.stack.forEach(layer => {
-    if (layer.route) {
-      console.log(`${layer.route.stack[0].method.toUpperCase()} ${layer.route.path}`);
-    } else if (layer.name === 'router' && layer.handle.stack) {
-      console.log(`Router: ${layer.regexp}`);
-      layer.handle.stack.forEach(routeLayer => {
-        if (routeLayer.route) {
-          console.log(`  ${Object.keys(routeLayer.route.methods)[0].toUpperCase()} ${routeLayer.route.path}`);
-        }
-      });
-    }
-  });
-} else {
-  console.log('⚠️ No routes registered in app!');
-}
-
-describe('Mobile Auth Routes', () => {
-  // Test user data with consistent phone number
-  const testPhoneNumber = '+9631234567890';
-  const testUserData = {
-    phoneNumber: testPhoneNumber,
-    password: 'Password123',
-    fullName: 'Test User',
-    lastName: 'Test',
-    email: 'test@example.com',
-    birthDate: '1990-01-01'
-  };
-  
-  // Store user ID, OTP code and token
-  let userId: string = '';
-  const testOtp = '000000'; // الرمز المستخدم في المتحكم لبيئة الاختبار
-  let userToken: string = '';
-
-  // Before all tests
-  beforeAll(async () => {
-    // Delete any existing user with the same phone number
-    await User.deleteMany({ phoneNumber: testUserData.phoneNumber });
-    console.log('Previous users deleted');
-  });
-
-  // After all tests
-  afterAll(async () => {
-    // Clean up data
-    await User.deleteMany({ phoneNumber: testUserData.phoneNumber });
-    console.log('Test users deleted');
-  });
-
-  // 1. Test send OTP
   describe('POST /api/mobile/auth/send-otp', () => {
-    it('should send OTP code to phone number', async () => {
-      console.log('Testing send OTP...');
-      
-      const response = await request(app)
-        .post('/api/mobile/auth/send-otp')
-        .send({
-          phoneNumber: testUserData.phoneNumber
-        });
-      
-      console.log('Server response status:', response.status);
-      console.log('Server response body:', response.body);
-      
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
+    it('يطلب رقم الهاتف', async () => {
+      const res = await request(app).post('/api/mobile/auth/send-otp').send({});
+      expect(res.status).toBe(400);
     });
 
-    it('should reject request without phone number', async () => {
-      const response = await request(app)
+    it('ينشئ رمزًا ولا يكشفه خارج وضع الديمو', async () => {
+      const res = await request(app)
         .post('/api/mobile/auth/send-otp')
-        .send({});
-      
-      expect(response.status).toBe(400);
-      expect(response.body.success).toBe(false);
+        .send({ phoneNumber });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      // DEMO_MODE=false في بيئة الاختبار
+      expect(res.body.demoOtp).toBeUndefined();
+
+      const otp = await prisma.otp.findFirst({ where: { phoneNumber } });
+      expect(otp).not.toBeNull();
+      // الرمز مخزَّن مشفَّرًا — كان نصًا صريحًا في نسخة Mongo
+      expect(otp!.code).not.toMatch(/^\d{6}$/);
+    });
+
+    it('يرفض التسجيل برقم مكتمل الملف مسبقًا', async () => {
+      await prisma.user.create({
+        data: { phoneNumber, isProfileComplete: true, password: await hashPassword(password) },
+      });
+
+      const res = await request(app)
+        .post('/api/mobile/auth/send-otp')
+        .send({ phoneNumber, isRegistration: true });
+
+      expect(res.status).toBe(400);
+      expect(res.body.userExists).toBe(true);
     });
   });
 
-  // 2. Test verify OTP
   describe('POST /api/mobile/auth/verify-otp', () => {
-    it('should verify OTP code and return JWT token', async () => {
-      // First send OTP to create user
-      await request(app)
-        .post('/api/mobile/auth/send-otp')
-        .send({ phoneNumber: testPhoneNumber });
-      
-      // Mock the OTP verification since we're in test mode
-      const response = await request(app)
+    it('يرفض الرمز 000000 حين يكون وضع الديمو مطفأ', async () => {
+      await request(app).post('/api/mobile/auth/send-otp').send({ phoneNumber });
+
+      const res = await request(app)
         .post('/api/mobile/auth/verify-otp')
-        .send({ 
-          phoneNumber: testPhoneNumber, 
-          otp: testOtp 
-        });
-      
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('token');
-      expect(typeof response.body.token).toBe('string');
-      
-      // Save token for later tests
-      if (response.body.token) {
-        userToken = response.body.token;
-      }
+        .send({ phoneNumber, otp: '000000' });
+
+      // هذا هو جوهر الثغرة السابقة: كان يُقبل دائمًا لأي رقم
+      expect(res.status).toBe(400);
     });
 
-    it('should return 400 for invalid OTP', async () => {
-      // Try to verify with an invalid OTP
-      const response = await request(app)
+    it('يرفض رمزًا غير موجود', async () => {
+      const res = await request(app)
         .post('/api/mobile/auth/verify-otp')
-        .send({ 
-          phoneNumber: testPhoneNumber, 
-          otp: 'invalid-otp' 
-        });
-      
-      expect(response.status).toBe(400);
+        .send({ phoneNumber, otp: '123456' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('يطلب الحقلين معًا', async () => {
+      const res = await request(app)
+        .post('/api/mobile/auth/verify-otp')
+        .send({ phoneNumber });
+
+      expect(res.status).toBe(400);
     });
   });
-}); 
+
+  describe('POST /api/mobile/auth/login', () => {
+    beforeEach(async () => {
+      await prisma.user.create({
+        data: {
+          phoneNumber,
+          fullName: 'مستخدم اختبار',
+          password: await hashPassword(password),
+          isProfileComplete: true,
+        },
+      });
+    });
+
+    it('يقبل بيانات صحيحة ويعيد توكنًا بلا كلمة مرور', async () => {
+      const res = await request(app)
+        .post('/api/mobile/auth/login')
+        .send({ phoneNumber, password });
+
+      expect(res.status).toBe(200);
+      expect(typeof res.body.token).toBe('string');
+      expect(res.body.user.password).toBeUndefined();
+    });
+
+    it('يرفض كلمة مرور خاطئة', async () => {
+      const res = await request(app)
+        .post('/api/mobile/auth/login')
+        .send({ phoneNumber, password: 'wrong' });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('يمنع دخول مستخدم محظور', async () => {
+      await prisma.user.update({ where: { phoneNumber }, data: { isBlocked: true } });
+
+      const res = await request(app)
+        .post('/api/mobile/auth/login')
+        .send({ phoneNumber, password });
+
+      expect(res.status).toBe(403);
+    });
+  });
+});
