@@ -45,11 +45,117 @@ const requireUserId = (req: Request, res: Response): string | null => {
 };
 
 // ---------------------------------------------------------------------------
+//  إعدادات المصادقة
+// ---------------------------------------------------------------------------
+
+/**
+ * ما يحتاج التطبيق معرفته قبل رسم شاشات المصادقة.
+ *
+ * يُقرأ عند الإقلاع فيتكيّف التطبيق مع تشغيل التحقق أو إيقافه دون
+ * إعادة بناء ونشر — وهو المطلوب هنا تحديدًا لأن الإيقاف مؤقت ريثما
+ * يُربط مزوّد الرسائل.
+ */
+export const getAuthConfig = async (_req: Request, res: Response) => {
+  return res.status(200).json({
+    success: true,
+    data: {
+      otpRequired: otpService.isOtpRequired(),
+      demoMode: otpService.isDemoMode(),
+    },
+  });
+};
+
+// ---------------------------------------------------------------------------
 //  التسجيل والدخول
 // ---------------------------------------------------------------------------
 
+/**
+ * تسجيل مباشر برقم هاتف وكلمة مرور، بلا رمز تحقق.
+ *
+ * متاح فقط حين `OTP_REQUIRED=false`. يرفض الطلب صراحةً حين يكون
+ * التحقق مُفعَّلًا بدل تجاهله بصمت، حتى لا يبقى مسار خلفي يلتفّ على
+ * التحقق إن فُعِّل لاحقًا.
+ */
+export const register = async (req: Request, res: Response) => {
+  try {
+    if (otpService.isOtpRequired()) {
+      return res.status(403).json({
+        success: false,
+        message: 'التسجيل يتطلب التحقق برمز. يرجى استخدام مسار إرسال الرمز',
+      });
+    }
+
+    const { phoneNumber, password, fullName, lastName, email } = req.body;
+
+    if (!phoneNumber || !password || !fullName) {
+      return res.status(400).json({
+        success: false,
+        message: 'رقم الهاتف والاسم الكامل وكلمة المرور مطلوبة',
+      });
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل',
+      });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { phoneNumber } });
+
+    if (existing?.isProfileComplete) {
+      return res.status(400).json({
+        success: false,
+        message: 'هذا الرقم مسجل بالفعل. يرجى تسجيل الدخول',
+        userExists: true,
+      });
+    }
+
+    // upsert لا create: قد يكون الرقم موجودًا بملف غير مكتمل من محاولة سابقة
+    const user = await prisma.user.upsert({
+      where: { phoneNumber },
+      update: {
+        fullName,
+        lastName,
+        email,
+        password: await hashPassword(password),
+        isProfileComplete: true,
+      },
+      create: {
+        phoneNumber,
+        fullName,
+        lastName,
+        email,
+        password: await hashPassword(password),
+        isProfileComplete: true,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'تم إنشاء الحساب بنجاح',
+      token: signToken(user.id),
+      isProfileComplete: true,
+      user: sanitizeUser(user),
+    });
+  } catch (error) {
+    console.error('Error registering user:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء إنشاء الحساب',
+    });
+  }
+};
+
 export const sendOTP = async (req: Request, res: Response) => {
   try {
+    if (!otpService.isOtpRequired()) {
+      return res.status(403).json({
+        success: false,
+        message: 'التحقق بالرمز موقوف حاليًا. يرجى التسجيل بكلمة مرور',
+      });
+    }
+
     const { phoneNumber, isRegistration } = req.body;
 
     if (!phoneNumber) {
@@ -357,6 +463,15 @@ export const uploadProfileImage = async (req: Request, res: Response) => {
 
 export const resetPasswordRequest = async (req: Request, res: Response) => {
   try {
+    // الاستعادة تعتمد على الرمز كليًا؛ بلا مزوّد رسائل لا سبيل للتحقق
+    // من ملكية الرقم، فتُغلق بدل أن تصير ثغرة استيلاء على الحسابات
+    if (!otpService.isOtpRequired()) {
+      return res.status(403).json({
+        success: false,
+        message: 'استعادة كلمة المرور موقوفة حاليًا. يرجى التواصل مع الدعم',
+      });
+    }
+
     const { phoneNumber } = req.body;
 
     if (!phoneNumber) {

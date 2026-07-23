@@ -3,51 +3,33 @@ import * as authController from '../../controllers/mobile/authController';
 import { protect } from '../../middleware/common/authMiddleware';
 import { uploadProfileImage } from '../../services/common/fileUploadService';
 
-// إنشاء موجه express
 const router = express.Router();
 
-// طباعة لتتبع تسجيل المسارات
-console.log('📝 تسجيل مسارات المصادقة للجوال في ملف authRoutes.ts');
+// --- عامة ---
 
-// مسارات المصادقة الأساسية - بدون صوت ال /api/mobile/auth
-router.post('/send-otp', (req, res, next) => {
-  console.log('🚀 طلب إرسال OTP وصل');
-  return authController.sendOTP(req, res);
-});
+/** يقرأه التطبيق عند الإقلاع ليعرف أي شاشات مصادقة يعرض */
+router.get('/config', authController.getAuthConfig);
 
-router.post('/verify-otp', (req, res, next) => {
-  console.log('🚀 طلب التحقق من OTP وصل');
-  return authController.verifyOtp(req, res);
-});
+/** تسجيل مباشر بلا رمز — لا يعمل إلا حين OTP_REQUIRED=false */
+router.post('/register', authController.register);
 
-router.post('/complete-registration', authController.completeRegistration);
+router.post('/send-otp', authController.sendOTP);
+router.post('/verify-otp', authController.verifyOtp);
 router.post('/login', authController.login);
 
-// مسارات استعادة كلمة المرور - لا تتطلب مصادقة
-router.post('/reset-password-request', (req, res, next) => {
-  console.log('🚀 طلب إعادة تعيين كلمة المرور وصل');
-  return authController.resetPasswordRequest(req, res);
-});
+// استعادة كلمة المرور
+router.post('/reset-password-request', authController.resetPasswordRequest);
+router.post('/verify-reset-code', authController.verifyResetCode);
+router.post('/reset-password', authController.resetPassword);
 
-router.post('/verify-reset-code', (req, res, next) => {
-  console.log('🚀 طلب التحقق من رمز إعادة التعيين وصل');
-  return authController.verifyResetCode(req, res);
-});
-
-router.post('/reset-password', (req, res, next) => {
-  console.log('🚀 طلب تعيين كلمة مرور جديدة وصل');
-  return authController.resetPassword(req, res);
-});
-
-// مسارات محمية تتطلب تسجيل الدخول
+// --- محمية ---
 router.use(protect);
+
+// إكمال التسجيل يلي التحقق بالرمز، فيحتاج التوكن الصادر عنه
+router.post('/complete-registration', authController.completeRegistration);
+
 router.get('/profile', authController.getUserProfile);
 router.put('/profile', authController.updateProfile);
-
-// مسار رفع صورة الملف الشخصي
 router.post('/upload-profile-image', uploadProfileImage, authController.uploadProfileImage);
 
-console.log('✅ تم تسجيل مسارات المصادقة للجوال في ملف authRoutes.ts');
-
-// تصدير الموجه
-export default router; 
+export default router;

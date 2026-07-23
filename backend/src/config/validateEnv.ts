@@ -29,6 +29,15 @@ export const validateEnv = () => {
     // وضع الديمو — كان ثابتًا في الكود (isDemoMode = true)، صار متغير بيئة
     DEMO_MODE: bool({ default: false }),
 
+    /**
+     * هل يُشترط التحقق برمز OTP للتسجيل والدخول؟
+     *
+     * إيقافه يتيح الإطلاق قبل ربط مزوّد رسائل، لكنه يعني أن أرقام
+     * الهواتف غير مُتحقَّق منها: يستطيع أي شخص التسجيل برقم غيره.
+     * ما يحدّ الأثر أن كشف بيانات التواصل يمرّ بموافقة الإدارة أصلًا.
+     */
+    OTP_REQUIRED: bool({ default: true }),
+
     // خدمة الرسائل (Twilio - للإنتاج)
     TWILIO_ACCOUNT_SID: str({ default: undefined }),
     TWILIO_AUTH_TOKEN: str({ default: undefined }),

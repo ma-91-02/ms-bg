@@ -20,6 +20,15 @@ const MAX_ATTEMPTS = 5;
 export const isDemoMode = (): boolean =>
   process.env.DEMO_MODE === 'true' && process.env.NODE_ENV !== 'production';
 
+/**
+ * هل التحقق بالرمز مُفعَّل؟
+ *
+ * حين يكون false يُتاح التسجيل المباشر برقم وكلمة مرور، وهو ما يسمح
+ * بالإطلاق قبل ربط مزوّد الرسائل. القيمة الافتراضية هي التفعيل: إيقاف
+ * التحقق قرار يجب أن يُتَّخذ صراحةً لا أن يُورَث من غياب متغيّر.
+ */
+export const isOtpRequired = (): boolean => process.env.OTP_REQUIRED !== 'false';
+
 export const DEMO_CODE = '000000';
 
 export const generateCode = (): string =>
