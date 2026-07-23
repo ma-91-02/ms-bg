@@ -1,8 +1,13 @@
 import axios from 'axios';
 
+// عنوان الـ API من متغير البيئة — كان مثبّتًا على localhost:3001 في الكود،
+// فتنكسر لوحة التحكم فور نشرها على أي نطاق حقيقي.
+// CRA يُضمّن المتغير وقت البناء، لذا يُمرَّر كـ ARG في Dockerfile.
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
 // إنشاء كائن axios بإعدادات افتراضية
 const api = axios.create({
-  baseURL: 'http://localhost:3001',  // استخدام البورت 3001 وهو الصحيح
+  baseURL: API_BASE_URL,
   timeout: 30000, // مهلة انتظار 30 ثانية
   headers: {
     'Content-Type': 'application/json',

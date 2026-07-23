@@ -1,0 +1,67 @@
+# ============================================================================
+#  نشر على Coolify — Docker Compose
+#
+#  في Coolify: New Resource → Docker Compose → الصق هذا الملف،
+#  ثم اضبط متغيرات البيئة المذكورة أدناه في تبويب Environment Variables.
+#
+#  لا تضع أي سر في هذا الملف — كلها تأتي من متغيرات Coolify.
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # غير منشور على الإنترنت — الخلفية وحدها تصل إليه عبر الشبكة الداخلية
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # يجب أن يبقى false — الخادم يرفض الإقلاع لو كان true مع NODE_ENV=production
+      DEMO_MODE: 'false'
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      SERVICE_FQDN_BACKEND_3001: /
+    volumes:
+      # الصور المرفوعة يجب أن تنجو من إعادة النشر
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # يُضمَّن وقت البناء — تغييره يستلزم إعادة بناء لا إعادة تشغيل
+        REACT_APP_API_URL: ${REACT_APP_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      SERVICE_FQDN_FRONTEND_80: /
+
+volumes:
+  pgdata:
+  uploads:

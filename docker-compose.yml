@@ -9,8 +9,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-ms_main_db}
       # ترتيب فرز يتعامل مع العربية بشكل صحيح
       LANG: ar_IQ.UTF-8
+    # 5433 على المضيف: المنفذ 5432 محجوز لقاعدة بيانات مشروع آخر على هذا الجهاز
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '${POSTGRES_PORT:-5433}:5432'
     volumes:
       - ms_bg_pgdata:/var/lib/postgresql/data
     healthcheck:

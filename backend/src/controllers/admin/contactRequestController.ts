@@ -1,218 +1,179 @@
-import { Request, Response } from 'express';
-import ContactRequest, { ContactRequestStatus } from '../../models/mobile/ContactRequest';
+import { Response } from 'express';
+import { Prisma, ContactRequestStatus as Status } from '@prisma/client';
+import prisma from '../../config/prisma';
 import { AuthRequest } from '../../types/express';
+import { ContactRequestStatus } from '../../models/mobile/ContactRequest';
+import * as notificationService from '../../services/mobile/notificationService';
+import { NotificationType } from '../../types/mobile/notifications';
 
-// الحصول على قائمة طلبات التواصل المعلقة
+/** الحقول المرتبطة التي تُرجَع مع كل طلب — كانت ثلاث populate متتابعة */
+const requestInclude = {
+  user: { select: { id: true, fullName: true, phoneNumber: true } },
+  advertisement: {
+    select: { id: true, type: true, category: true, governorate: true, description: true },
+  },
+  advertiserUser: { select: { id: true, fullName: true, phoneNumber: true } },
+} satisfies Prisma.ContactRequestInclude;
+
+const requireAdmin = (req: AuthRequest, res: Response): boolean => {
+  if (!req.admin) {
+    res.status(401).json({
+      success: false,
+      message: 'غير مصرح به. يجب تسجيل الدخول كمشرف',
+    });
+    return false;
+  }
+  return true;
+};
+
+/** جلب مُصفَّح لطلبات التواصل — أساس getPending و getAll معًا */
+const listRequests = async (
+  res: Response,
+  where: Prisma.ContactRequestWhereInput,
+  page: number,
+  limit: number,
+  order: 'asc' | 'desc'
+) => {
+  const [total, contactRequests] = await prisma.$transaction([
+    prisma.contactRequest.count({ where }),
+    prisma.contactRequest.findMany({
+      where,
+      orderBy: { createdAt: order },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: requestInclude,
+    }),
+  ]);
+
+  return res.status(200).json({
+    success: true,
+    count: contactRequests.length,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    data: contactRequests,
+  });
+};
+
+const parsePaging = (req: AuthRequest) => ({
+  page: Math.max(1, Number(req.query.page) || 1),
+  limit: Math.min(100, Math.max(1, Number(req.query.limit) || 10)),
+});
+
 export const getPendingContactRequests = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      console.log('❌ طلب غير مصرح به - الوصول إلى طلبات التواصل المعلقة');
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
-
-    console.log('📥 طلب جلب طلبات التواصل المعلقة من المشرف:', req.admin._id);
-    const { page = 1, limit = 10 } = req.query;
-
-    // بناء الفلتر - فقط الطلبات المعلقة
-    const filter = { status: ContactRequestStatus.PENDING };
-
-    // الحصول على إجمالي عدد الطلبات
-    const total = await ContactRequest.countDocuments(filter);
-    console.log(`📊 إجمالي عدد طلبات التواصل المعلقة: ${total}`);
-
-    // حساب التخطي والحد
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // جلب الطلبات
-    const contactRequests = await ContactRequest.find(filter)
-      .sort({ createdAt: 1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .populate('userId', 'fullName phoneNumber')
-      .populate('advertisementId', 'type category governorate description')
-      .populate('advertiserUserId', 'fullName phoneNumber');
-
-    console.log(`✅ تم جلب ${contactRequests.length} طلب تواصل معلق`);
-
-    return res.status(200).json({
-      success: true,
-      count: contactRequests.length,
-      total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      data: contactRequests
-    });
+    if (!requireAdmin(req, res)) return;
+    const { page, limit } = parsePaging(req);
+    // الأقدم أولًا — الطلبات المعلقة تُعالَج بترتيب ورودها
+    return await listRequests(res, { status: ContactRequestStatus.PENDING }, page, limit, 'asc');
   } catch (error: any) {
     console.error('❌ خطأ في الحصول على طلبات التواصل المعلقة:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// الحصول على جميع طلبات التواصل
 export const getAllContactRequests = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      console.log('❌ طلب غير مصرح به - الوصول إلى جميع طلبات التواصل');
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
+    if (!requireAdmin(req, res)) return;
+    const { page, limit } = parsePaging(req);
 
-    console.log('📥 طلب جلب جميع طلبات التواصل من المشرف:', req.admin._id);
-    const { status, page = 1, limit = 10 } = req.query;
+    const where: Prisma.ContactRequestWhereInput = {};
+    const status = req.query.status as string | undefined;
 
-    // بناء الفلتر
-    const filter: any = {};
-    
+    // التحقق من صحة الحالة — سابقًا كانت تُمرَّر للاستعلام كما وردت
     if (status) {
-      filter.status = status;
-      console.log(`📋 تصفية طلبات التواصل حسب الحالة: ${status}`);
+      if (!Object.values(Status).includes(status as Status)) {
+        return res.status(400).json({ success: false, message: 'حالة غير صالحة' });
+      }
+      where.status = status as Status;
     }
 
-    // الحصول على إجمالي عدد الطلبات
-    const total = await ContactRequest.countDocuments(filter);
-    console.log(`📊 إجمالي عدد طلبات التواصل: ${total}`);
-
-    // حساب التخطي والحد
-    const skip = (Number(page) - 1) * Number(limit);
-    
-    // جلب الطلبات
-    const contactRequests = await ContactRequest.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .populate('userId', 'fullName phoneNumber')
-      .populate('advertisementId', 'type category governorate description')
-      .populate('advertiserUserId', 'fullName phoneNumber');
-
-    console.log(`✅ تم جلب ${contactRequests.length} طلب تواصل`);
-
-    return res.status(200).json({
-      success: true,
-      count: contactRequests.length,
-      total,
-      totalPages: Math.ceil(total / Number(limit)),
-      currentPage: Number(page),
-      data: contactRequests
-    });
+    return await listRequests(res, where, page, limit, 'desc');
   } catch (error: any) {
     console.error('❌ خطأ في الحصول على طلبات التواصل:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// الموافقة على طلب تواصل
+/**
+ * تغيير حالة طلب تواصل مع إشعار صاحب الطلب.
+ *
+ * الشرط `status: PENDING` جزء من الاستعلام لا فحص قبله: سابقًا كان
+ * القراءة ثم الفحص ثم الحفظ ثلاث خطوات منفصلة، فطلبان متزامنان قد
+ * يعالجان الطلب نفسه مرتين. الآن التحديث الشرطي ذرّي.
+ */
+const decideRequest = async (
+  req: AuthRequest,
+  res: Response,
+  decision: 'approve' | 'reject'
+) => {
+  const { id } = req.params;
+  const approving = decision === 'approve';
+
+  const result = await prisma.contactRequest.updateMany({
+    where: { id, status: ContactRequestStatus.PENDING },
+    data: approving
+      ? {
+          status: ContactRequestStatus.APPROVED,
+          approvedById: req.admin!.id,
+          approvedAt: new Date(),
+        }
+      : {
+          status: ContactRequestStatus.REJECTED,
+          rejectionReason: req.body?.rejectionReason || 'غير موافق عليه من قبل الإدارة',
+        },
+  });
+
+  if (result.count === 0) {
+    const exists = await prisma.contactRequest.findUnique({ where: { id } });
+    return exists
+      ? res.status(400).json({ success: false, message: 'تم معالجة هذا الطلب مسبقًا' })
+      : res.status(404).json({ success: false, message: 'طلب التواصل غير موجود' });
+  }
+
+  const contactRequest = await prisma.contactRequest.findUnique({
+    where: { id },
+    include: requestInclude,
+  });
+
+  // إشعار صاحب الطلب بالقرار — لم يكن يُرسَل سابقًا رغم وجود أنواع إشعارات له
+  await notificationService
+    .createNotification({
+      userId: contactRequest!.userId,
+      title: approving ? 'تمت الموافقة على طلب التواصل' : 'رُفض طلب التواصل',
+      body: approving
+        ? 'يمكنك الآن الاطلاع على معلومات التواصل الخاصة بصاحب الإعلان'
+        : contactRequest!.rejectionReason || 'رُفض طلبك من قبل الإدارة',
+      type: approving ? NotificationType.CONTACT_APPROVED : NotificationType.CONTACT_REJECTED,
+      referenceId: contactRequest!.id,
+    })
+    .catch((e) => console.error('تعذّر إرسال إشعار القرار:', e));
+
+  return res.status(200).json({
+    success: true,
+    message: approving
+      ? 'تمت الموافقة على طلب التواصل بنجاح'
+      : 'تم رفض طلب التواصل بنجاح',
+    data: contactRequest,
+  });
+};
+
 export const approveContactRequest = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
-
-    const { id } = req.params;
-
-    // البحث عن الطلب
-    const contactRequest = await ContactRequest.findById(id);
-
-    if (!contactRequest) {
-      return res.status(404).json({
-        success: false,
-        message: 'طلب التواصل غير موجود'
-      });
-    }
-
-    // التحقق من حالة الطلب
-    if (contactRequest.status !== ContactRequestStatus.PENDING) {
-      return res.status(400).json({
-        success: false,
-        message: 'تم معالجة هذا الطلب مسبقًا'
-      });
-    }
-
-    // تحديث حالة الطلب
-    contactRequest.status = ContactRequestStatus.APPROVED;
-    contactRequest.approvedBy = req.admin._id;
-    contactRequest.approvedAt = new Date();
-    
-    await contactRequest.save();
-
-    return res.status(200).json({
-      success: true,
-      message: 'تمت الموافقة على طلب التواصل بنجاح',
-      data: contactRequest
-    });
+    if (!requireAdmin(req, res)) return;
+    return await decideRequest(req, res, 'approve');
   } catch (error: any) {
     console.error('خطأ في الموافقة على طلب التواصل:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
 };
 
-// رفض طلب تواصل
 export const rejectContactRequest = async (req: AuthRequest, res: Response) => {
   try {
-    if (!req.admin) {
-      return res.status(401).json({
-        success: false,
-        message: 'غير مصرح به. يجب تسجيل الدخول كمشرف'
-      });
-    }
-
-    const { id } = req.params;
-    const { rejectionReason } = req.body;
-
-    // البحث عن الطلب
-    const contactRequest = await ContactRequest.findById(id);
-
-    if (!contactRequest) {
-      return res.status(404).json({
-        success: false,
-        message: 'طلب التواصل غير موجود'
-      });
-    }
-
-    // التحقق من حالة الطلب
-    if (contactRequest.status !== ContactRequestStatus.PENDING) {
-      return res.status(400).json({
-        success: false,
-        message: 'تم معالجة هذا الطلب مسبقًا'
-      });
-    }
-
-    // تحديث حالة الطلب
-    contactRequest.status = ContactRequestStatus.REJECTED;
-    contactRequest.rejectionReason = rejectionReason || 'غير موافق عليه من قبل الإدارة';
-    
-    await contactRequest.save();
-
-    return res.status(200).json({
-      success: true,
-      message: 'تم رفض طلب التواصل بنجاح',
-      data: contactRequest
-    });
+    if (!requireAdmin(req, res)) return;
+    return await decideRequest(req, res, 'reject');
   } catch (error: any) {
     console.error('خطأ في رفض طلب التواصل:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'حدث خطأ في الخادم',
-      error: error.message
-    });
+    return res.status(500).json({ success: false, message: 'حدث خطأ في الخادم' });
   }
-}; 
+};
