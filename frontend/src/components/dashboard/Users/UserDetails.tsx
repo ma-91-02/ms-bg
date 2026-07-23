@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, getUserById } from '../../../services/userService';
 import '../../../styles/UserDetails.css';
+import PhoneNumber from '../../common/PhoneNumber';
 
 interface UserDetailsProps {
   userId: string;
@@ -151,18 +152,28 @@ const UserDetails: React.FC<UserDetailsProps> = ({ userId, onClose }) => {
                   
                   <div className="info-item">
                     <div className="info-label">رقم الهاتف</div>
-                    <div className="info-value">{user.phone || 'غير متوفر'}</div>
+                    <div className="info-value">
+                      <PhoneNumber value={user.phone} fallback="غير متوفر" />
+                    </div>
                   </div>
                   
-                  <div className="info-item">
-                    <div className="info-label">البريد الإلكتروني</div>
-                    <div className="info-value">{user.email || 'غير متوفر'}</div>
-                  </div>
+                  {/* البريد وتاريخ الميلاد لا يجمعهما التطبيق: التسجيل
+                      بالهاتف وحده. فكان الحقلان يعرضان «غير متوفر» عند كل
+                      مستخدم بلا استثناء ويزحمان الشاشة بصفّين فارغين
+                      دائمًا. يظهران الآن حين تكون لهما قيمة فقط */}
+                  {user.email && (
+                    <div className="info-item">
+                      <div className="info-label">البريد الإلكتروني</div>
+                      <div className="info-value">{user.email}</div>
+                    </div>
+                  )}
                   
-                  <div className="info-item">
-                    <div className="info-label">تاريخ الميلاد</div>
-                    <div className="info-value">{user.birthDate || 'غير متوفر'}</div>
-                  </div>
+                  {user.birthDate && (
+                    <div className="info-item">
+                      <div className="info-label">تاريخ الميلاد</div>
+                      <div className="info-value">{user.birthDate}</div>
+                    </div>
+                  )}
                   
                   <div className="info-item">
                     <div className="info-label">تاريخ التسجيل</div>

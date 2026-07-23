@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getUsers, deleteUser, toggleBlockUser, User } from '../../../services/userService';
 import { useLocation } from 'react-router-dom';
 import UserDetails from './UserDetails';
+import PhoneNumber from '../../common/PhoneNumber';
 import '../../../styles/UsersList.css';
 
 const UsersList: React.FC = () => {
@@ -202,7 +203,9 @@ const UsersList: React.FC = () => {
                 </div>
                 <div className="user-info">
                   <h3>{user.name || 'مستخدم'}</h3>
-                  <p className="user-phone">{user.phone || 'بدون رقم هاتف'}</p>
+                  <p className="user-phone">
+                    <PhoneNumber value={user.phone} />
+                  </p>
                 </div>
                 <span className={`status-indicator ${user.isBlocked ? 'blocked' : 'active'}`}>
                   {user.isBlocked ? 'محظور' : 'نشط'}

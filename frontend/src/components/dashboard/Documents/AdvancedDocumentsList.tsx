@@ -535,8 +535,8 @@ const AdvancedDocumentsList: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredDocuments.map(doc => (
-                <tr key={doc.id || Math.random().toString()} className={selectedDocument?.id === doc.id ? 'selected' : ''}>
+              {filteredDocuments.map((doc, index) => (
+                <tr key={doc.id ?? `row-${index}`} className={selectedDocument?.id === doc.id ? 'selected' : ''}>
                   {/* القاموس موجود في translationUtils لكنه لم يكن يُستخدم هنا،
                       فتظهر قيم التعداد الخام (passport / baghdad) للمشرف */}
                   <td>{doc.documentType ? translateDocumentType(doc.documentType) : 'غير معروف'}</td>
@@ -561,29 +561,37 @@ const AdvancedDocumentsList: React.FC = () => {
                         تفاصيل
                       </button>
                       
+                      {/* الإجراءات المتاحة تتبع حالة الإعلان.
+                          كانت الأربعة تُعرض دائمًا ويُعطَّل غير المتاح
+                          منها، فيتجاوز الصفُّ عرضَ الجدول ويُقصّ آخر زر
+                          بصمت. وفوق ذلك كان «تم الحل» معروضًا على إعلان
+                          لم يُعتمد بعد — إجراء لا معنى له في تلك الحالة */}
                       {doc.id && (
                         <>
-                          <button 
-                            className="approve-button"
-                            onClick={() => handleApprove(doc.id!)}
-                            disabled={!doc.id || doc.status === 'approved'}
-                          >
-                            موافقة
-                          </button>
-                          <button 
-                            className="reject-button"
-                            onClick={() => handleReject(doc.id!)}
-                            disabled={!doc.id || doc.status === 'rejected'}
-                          >
-                            رفض
-                          </button>
-                          <button 
-                            className="resolve-button"
-                            onClick={() => handleResolve(doc.id!)}
-                            disabled={!doc.id || doc.status === 'resolved'}
-                          >
-                            تم الحل
-                          </button>
+                          {doc.status !== 'approved' && doc.status !== 'resolved' && (
+                            <button 
+                              className="approve-button"
+                              onClick={() => handleApprove(doc.id!)}
+                            >
+                              موافقة
+                            </button>
+                          )}
+                          {doc.status !== 'rejected' && doc.status !== 'resolved' && (
+                            <button 
+                              className="reject-button"
+                              onClick={() => handleReject(doc.id!)}
+                            >
+                              رفض
+                            </button>
+                          )}
+                          {doc.status === 'approved' && (
+                            <button 
+                              className="resolve-button"
+                              onClick={() => handleResolve(doc.id!)}
+                            >
+                              تم الحل
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

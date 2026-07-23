@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../../../styles/Sidebar.css';
 import logoIcon from '../../../assets/logo-icon.svg';
+import { SECTIONS } from '../../../constants/sections';
 
 interface SidebarProps {
   activeSection: string;
@@ -117,59 +118,29 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, setActiveSection }) =>
         </div>
 
         <div className="sidebar-menu">
-          <div 
-            className={`sidebar-item ${activeSection === 'home' ? 'active' : ''}`}
-            onClick={() => handleSectionChange('home')}
-          >
-            <i className="fas fa-home"></i>
-            <span>الصفحة الرئيسية</span>
-            <div className="tooltip">الصفحة الرئيسية</div>
-          </div>
-          
-          <div 
-            className={`sidebar-item ${activeSection === 'users' ? 'active' : ''}`}
-            onClick={() => handleSectionChange('users')}
-          >
-            <i className="fas fa-users"></i>
-            <span>المستخدمون</span>
-            <div className="tooltip">المستخدمون</div>
-          </div>
-          
-          <div 
-            className={`sidebar-item ${activeSection === 'advertisements' ? 'active' : ''}`}
-            onClick={() => handleSectionChange('advertisements')}
-          >
-            <i className="fas fa-ad"></i>
-            <span>جميع الإعلانات</span>
-            <div className="tooltip">جميع الإعلانات</div>
-          </div>
-          
-          <div 
-            className={`sidebar-item ${activeSection === 'matches-system' ? 'active' : ''}`}
-            onClick={() => handleSectionChange('matches-system')}
-          >
-            <i className="fas fa-exchange-alt"></i>
-            <span>نظام المطابقات</span>
-            <div className="tooltip">نظام المطابقات</div>
-          </div>
-
-          <div 
-            className={`sidebar-item ${activeSection === 'review' ? 'active' : ''}`}
-            onClick={() => handleSectionChange('review')}
-          >
-            <i className="fas fa-clipboard-check"></i>
-            <span>الإعلانات للمراجعة</span>
-            <div className="tooltip">الإعلانات للمراجعة</div>
-          </div>
-          
-          <div 
-            className={`sidebar-item ${activeSection === 'contacts' ? 'active' : ''}`}
-            onClick={() => handleSectionChange('contacts')}
-          >
-            <i className="fas fa-envelope"></i>
-            <span>طلبات التواصل</span>
-            <div className="tooltip">طلبات التواصل</div>
-          </div>
+          {/* بُنيت من `SECTIONS` بدل ست كتل متطابقة: إضافة قسم كانت
+              تتطلّب تعديل الشريط والمسار والمبدّل، فينسى أحدها */}
+          {SECTIONS.map((section) => (
+            <div
+              key={section.slug}
+              className={`sidebar-item ${activeSection === section.slug ? 'active' : ''}`}
+              onClick={() => handleSectionChange(section.slug)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleSectionChange(section.slug);
+                }
+              }}
+              aria-label={section.label}
+              aria-current={activeSection === section.slug ? 'page' : undefined}
+            >
+              <i className={`fas ${section.icon}`}></i>
+              <span>{section.label}</span>
+              <div className="tooltip">{section.label}</div>
+            </div>
+          ))}
         </div>
 
         <div className="sidebar-footer">

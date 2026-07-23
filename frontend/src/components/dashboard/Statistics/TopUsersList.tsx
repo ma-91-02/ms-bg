@@ -3,11 +3,12 @@ import { Box, Card, Typography, List, ListItem, ListItemAvatar, ListItemText, Av
 import PersonIcon from '@mui/icons-material/Person';
 import { getTopActiveUsers } from '../../../services/userService';
 import '../../../styles/Statistics.css';
+import PhoneNumber from '../../common/PhoneNumber';
 
 interface TopUser {
   id: string;
   name: string;
-  email: string;
+  phoneNumber: string;
   profileImage?: string;
   activityCount: number;
   lastActive?: string;
@@ -113,7 +114,7 @@ const TopUsersList: React.FC<TopUsersListProps> = ({ title = 'المستخدمي
                           color="text.primary"
                           component="span"
                         >
-                          {user.email}
+                          <PhoneNumber value={user.phoneNumber} fallback="—" />
                         </Typography>
                         <Typography 
                           variant="body2" 

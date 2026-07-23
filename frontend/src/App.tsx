@@ -29,6 +29,16 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          {/* لكل قسم مسار خاص، فيعمل زر الرجوع ويصمد التحديث
+              ويمكن مشاركة رابط قسم بعينه */}
+          <Route 
+            path="/admin/dashboard/:section" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/admin/user/:id" 
             element={

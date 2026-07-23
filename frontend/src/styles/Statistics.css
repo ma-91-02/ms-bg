@@ -61,6 +61,9 @@
   color: #1f2937;
   margin-bottom: 1.5rem;
   position: relative;
+  /* المحاذاة صراحةً: العنوان كان يرث التوسيط من `.App` فينفصل عنه
+     شريطه المزخرف المثبَّت على الحافة اليمنى */
+  text-align: right;
   padding-right: 15px;
 }
 
@@ -96,9 +99,16 @@
   justify-content: space-between;
 }
 
+.MuiCard-root.stats-card,
+.MuiCard-root.stats-card .MuiTypography-root {
+  /* أبيض فوق التدرّج بدل الأسود الافتراضي من MUI */
+  color: #fff;
+}
+
 .stats-icon {
   font-size: 2.5rem !important;
-  opacity: 0.8;
+  color: #fff;
+  opacity: 0.9;
   margin-left: 16px;
 }
 
@@ -115,27 +125,36 @@
 }
 
 /* أنماط بطاقات معينة */
-.total-users {
+/*
+ * التدرّجات اللونية مربوطة بـ `.MuiCard-root` لرفع الأولوية.
+ *
+ * `Card` من MUI يحقن صنفًا مولَّدًا (emotion) يضبط
+ * `background-color: #fff`، وهو يتغلّب على صنف بأولوية أدنى. فكانت
+ * كل بطاقات الإحصائيات تُرسم بيضاء وتُورّث أيقوناتها اللون الأسود
+ * الافتراضي — التصميم اللوني موجود في الملف ولا يظهر على الشاشة
+ * إطلاقًا.
+ */
+.MuiCard-root.total-users {
   background: linear-gradient(135deg, #6b46c1 0%, #9f7aea 100%);
 }
 
-.total-documents {
+.MuiCard-root.total-documents {
   background: linear-gradient(135deg, #2c5282 0%, #4299e1 100%);
 }
 
-.pending-documents {
+.MuiCard-root.pending-documents {
   background: linear-gradient(135deg, #c05621 0%, #ed8936 100%);
 }
 
-.contact-requests {
+.MuiCard-root.contact-requests {
   background: linear-gradient(135deg, #805ad5 0%, #b794f4 100%);
 }
 
-.approved-documents {
+.MuiCard-root.approved-documents {
   background: linear-gradient(135deg, #2f855a 0%, #48bb78 100%);
 }
 
-.resolved-documents {
+.MuiCard-root.resolved-documents {
   background: linear-gradient(135deg, #1a365d 0%, #3182ce 100%);
 }
 

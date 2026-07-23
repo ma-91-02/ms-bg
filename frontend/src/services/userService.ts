@@ -180,6 +180,16 @@ const mapUserData = (data: any, statsData?: any): User => {
 };
 
 // استرجاع قائمة المستخدمين الأكثر نشاطاً
+/*
+ * لا بيانات مُصطنَعة عند الفشل.
+ *
+ * كانت الدالة تُرجع مستخدمين مخترعين بأسماء عربية جاهزة وأعداد نشاط
+ * من `Math.random()` كلّما فشل الطلب أو جاء بشكل غير متوقّع. فتبدو
+ * اللوحة سليمةً والخادم متوقّف، ولا يملك المشرف ما يميّز به الحقيقيَّ
+ * من المُختلَق — وهو في لوحة إدارة أسوأ من شاشة خطأ صريحة.
+ *
+ * `TopUsersList` يعرض حالة خطأ جاهزة؛ الفشل يصل إليها الآن.
+ */
 export const getTopActiveUsers = async (limit: number = 5): Promise<any[]> => {
   try {
     console.log(`جلب أكثر ${limit} مستخدمين نشاطاً...`);
@@ -192,61 +202,27 @@ export const getTopActiveUsers = async (limit: number = 5): Promise<any[]> => {
       return response.data.data.map((user: any) => ({
         id: user._id || user.id,
         name: user.name || 'مستخدم',
-        email: user.email || 'غير متوفر',
+        phoneNumber: user.phoneNumber,
         profileImage: user.profileImage || user.avatar,
-        activityCount: user.activityCount || user.activities || Math.floor(Math.random() * 30) + 5,
+        // `?? 0` لا `||`: الصفر عدد نشاط صحيح، وكان يُستبدل برقم
+        // عشوائي بين 5 و34 يُعرض على المشرف كأنه واقع
+        activityCount: user.activityCount ?? 0,
         lastActive: user.lastActive || user.lastLogin || user.updatedAt
       }));
     } else if (response.data && Array.isArray(response.data.users)) {
       return response.data.users.map((user: any) => ({
         id: user._id || user.id,
         name: user.name || 'مستخدم',
-        email: user.email || 'غير متوفر',
+        phoneNumber: user.phoneNumber,
         profileImage: user.profileImage || user.avatar,
-        activityCount: user.activityCount || user.activities || Math.floor(Math.random() * 30) + 5,
+        activityCount: user.activityCount ?? 0,
         lastActive: user.lastActive || user.lastLogin || user.updatedAt
       }));
     }
     
-    console.warn('لم يتم العثور على بيانات للمستخدمين النشطين، سيتم استخدام بيانات وهمية للاختبار');
-    return generateMockActiveUsers(limit);
+    throw new Error('شكل غير متوقّع لاستجابة المستخدمين النشطين');
   } catch (error) {
     console.error('خطأ في جلب المستخدمين النشطين:', error);
-    // بدلاً من رمي خطأ، نقوم بإنشاء بيانات وهمية للاختبار
-    return generateMockActiveUsers(limit);
+    throw error;
   }
 };
-
-// توليد بيانات وهمية للمستخدمين النشطين
-function generateMockActiveUsers(limit: number): Array<{
-  id: string;
-  name: string;
-  email: string;
-  profileImage?: string;
-  activityCount: number;
-  lastActive: string;
-}> {
-  const result = [];
-  const names = ['محمد علي', 'أحمد محمود', 'عبدالله عمر', 'سارة أحمد', 'فاطمة محمد', 'نور حسين', 'عمر علي', 'ليلى عباس'];
-  
-  for (let i = 0; i < limit; i++) {
-    const name = names[i % names.length];
-    const activityCount = 30 - i * 3; // أعلى نشاط للأول ثم يتناقص
-    
-    // توليد تاريخ عشوائي في الأيام السبعة الماضية
-    const date = new Date();
-    date.setDate(date.getDate() - Math.floor(Math.random() * 7));
-    date.setHours(Math.floor(Math.random() * 24));
-    date.setMinutes(Math.floor(Math.random() * 60));
-    
-    result.push({
-      id: `user-${i + 1}`,
-      name,
-      email: `${name.replace(' ', '.').toLowerCase()}@example.com`,
-      activityCount,
-      lastActive: date.toISOString()
-    });
-  }
-  
-  return result;
-} 

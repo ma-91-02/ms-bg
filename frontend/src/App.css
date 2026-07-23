@@ -1,38 +1,16 @@
+/*
+ * أنماط الجذر.
+ *
+ * كان هذا الملف قالب create-react-app كما وُلِد: شعار React الدوّار
+ * (`.App-logo`) وترويسته السوداء (`.App-header`) ورابطه (`.App-link`)،
+ * ولا شيء منها يظهر في اللوحة. ومعها بقي `text-align: center` على
+ * `.App` فوسّط نصَّ اللوحة كلّها — ومنه العنوان الذي انفصل عنه شريطه
+ * الجانبي المزخرف، فبدا كأنه عنصر شارد في أعلى الصفحة.
+ *
+ * لوحة عربية تُقرأ من اليمين: المحاذاة تتبع اتجاه الصفحة عبر `start`
+ * بدل قيمة فيزيائية ثابتة.
+ */
+
 .App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  text-align: start;
 }

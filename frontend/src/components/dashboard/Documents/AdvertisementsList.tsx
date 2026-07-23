@@ -20,6 +20,18 @@ const AdvertisementsList: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [currentAction, setCurrentAction] = useState<string>('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  /**
+   * الصور التي فشل تحميلها.
+   *
+   * الإعلانات القديمة تحمل مسارات صور لم تعد موجودة على القرص، وكان
+   * `<img>` يعرض أيقونة الكسر ونصّ `alt` بحجمه الطبيعي فيفيض عن
+   * الإطار ويغطّي شارة الحالة. العنصر النائب موجود أصلًا لحالة
+   * «لا صورة» ولم يكن يُستخدم عند فشل التحميل.
+   */
+  const [brokenImages, setBrokenImages] = useState<Set<string>>(new Set());
+  const markImageBroken = (url: string) =>
+    setBrokenImages((prev) => (prev.has(url) ? prev : new Set(prev).add(url)));
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedAdId, setSelectedAdId] = useState<string | null>(null);
@@ -385,11 +397,13 @@ const AdvertisementsList: React.FC = () => {
                 >
                   <div className="ad-card-header">
                     <div className="ad-image-container">
-                      {ad.images && ad.images.length > 0 ? (
+                      {ad.images && ad.images.length > 0 && !brokenImages.has(ad.images[0]) ? (
                         <img 
                           src={ad.images[0]} 
                           alt={getTranslatedDocumentType(ad.documentType)} 
                           className="ad-thumbnail"
+                          loading="lazy"
+                          onError={() => ad.images && markImageBroken(ad.images[0])}
                           onClick={(e) => ad.images && openImageModal(ad, ad.images[0], e)}
                         />
                       ) : (
@@ -403,9 +417,14 @@ const AdvertisementsList: React.FC = () => {
                     </div>
                     <div className="ad-info">
                       <h3>{getTranslatedDocumentType(ad.documentType)}</h3>
+                      {/* اسم صاحب المستمسك حقل اختياري في نموذج النشر.
+                          كان الملصق يظهر دائمًا فيبقى «اسم:» معلّقًا بلا
+                          قيمة على البطاقات التي تُرك فيها فارغًا */}
                       <div className="ad-document-info">
                         <span className="document-title">اسم:</span>
-                        <span className="document-value">{safeRender(ad.name)}</span>
+                        <span className={`document-value ${ad.name ? '' : 'is-empty'}`}>
+                          {ad.name ? safeRender(ad.name) : 'غير مذكور'}
+                        </span>
                       </div>
                       
                       <div className="ad-user-info">

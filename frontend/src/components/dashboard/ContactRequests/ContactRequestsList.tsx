@@ -9,7 +9,7 @@ import {
   ContactRequest
 } from '../../../services/contactRequestService';
 import { translateDocumentType, translateCity } from '../../../utils/translationUtils';
-import './ContactRequestsList.css';
+import '../../../styles/ContactRequestsList.css';
 
 const ContactRequestsList: React.FC = () => {
   const navigate = useNavigate();
@@ -18,7 +18,9 @@ const ContactRequestsList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentAction, setCurrentAction] = useState<string>('');
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('pending');
+  // الافتراضي «الكل»: كان `pending` فيفتح القسم فارغًا حين لا توجد
+  // طلبات معلّقة، ويبدو معطّلًا بينما فيه طلبات مُعالَجة
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);

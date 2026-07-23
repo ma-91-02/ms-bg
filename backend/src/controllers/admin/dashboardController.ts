@@ -273,7 +273,10 @@ export const getActiveUsers = async (req: AuthRequest, res: Response) => {
       .map((u) => ({
         id: u.id,
         name: u.fullName || u.phoneNumber,
-        email: u.email || 'غير متوفر',
+        // التسجيل في هذا التطبيق بالهاتف لا بالبريد، و`email` اختياري
+        // لا يملؤه أحد — فكان السطر الثانوي في «الأكثر نشاطًا» يقرأ
+        // «غير متوفر» تحت كل مستخدم بلا استثناء
+        phoneNumber: u.phoneNumber,
         profileImage: u.profileImage,
         activityCount: u._count.advertisements + u._count.contactRequests,
         lastActive: u.updatedAt,

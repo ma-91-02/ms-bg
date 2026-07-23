@@ -31,12 +31,23 @@ body {
   position: relative;
 }
 
+/*
+ * الشريط الجانبي عنصر في تدفّق الـ flex (position: sticky) فيحجز عرضه
+ * من التخطيط تلقائيًا. وكانت `.dashboard-content` تضيف فوق ذلك
+ * `margin-right` بعرض الشريط نفسه، فيُطرح العرض مرّتين ويضيع نحو ربع
+ * الشاشة على كل صفحة في اللوحة — ولهذا كانت البطاقات تُحشر في عمود
+ * واحد ويبقى فراغ واسع إلى جانبها.
+ *
+ * القاعدة الأساسية كانت معطّلة بتعليق أصلًا؛ التعطيل لم يصل إلى
+ * استعلامات الوسائط ولا إلى وضع الأيقونات.
+ */
 .dashboard-content {
   flex: 1;
+  /* `min-width: 0` يسمح للمحتوى بالانكماش داخل flex بدل دفع التخطيط */
+  min-width: 0;
   padding: 25px;
   padding-right: 0;
   overflow-y: auto;
-  /* margin-right: var(--sidebar-width); */
   transition: margin 0.3s ease;
 }
 
@@ -47,7 +58,7 @@ body {
 }
 
 .with-icons-sidebar {
-  margin-right: var(--sidebar-icons-only-width) !important;
+  /* الشريط يتقلّص إلى 70px من تلقائه؛ لا حاجة لهامش يقابله */
 }
 
 /* أنماط عامة للأزرار */
@@ -146,13 +157,8 @@ button {
 /* تابلت (حتى 992px) */
 @media screen and (max-width: 992px) {
   .dashboard-content {
-    margin-right: var(--sidebar-width-tablet);
     padding: 20px;
     padding-right: 0;
-  }
-  
-  .dashboard-content.with-icons-sidebar {
-    margin-right: var(--sidebar-icons-only-width);
   }
   
   .form-row {

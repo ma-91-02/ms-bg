@@ -35,6 +35,22 @@ export const documentTypeTranslations: Record<string, string> = {
   'other': 'أخرى'
 };
 
+/**
+ * نوع الإعلان: مفقود أو موجود.
+ *
+ * لم يكن له قاموس، فتظهر `lost` و`found` بالإنجليزية للمشرف العربي.
+ */
+export const advertisementTypeTranslations: Record<string, string> = {
+  'lost': 'مفقود',
+  'found': 'موجود',
+};
+
+export const translateAdvertisementType = (type: any): string => {
+  if (type === null || type === undefined) return 'غير محدد';
+  const key = String(type).toLowerCase().trim();
+  return advertisementTypeTranslations[key] || String(type);
+};
+
 // قاموس المدن العراقية من الإنجليزية إلى العربية
 export const cityTranslations: Record<string, string> = {
   // محافظات العراق
@@ -44,6 +60,7 @@ export const cityTranslations: Record<string, string> = {
   'mosul': 'الموصل',
   'erbil': 'أربيل',
   'sulaymaniyah': 'السليمانية',
+  'duhok': 'دهوك',
   'dohuk': 'دهوك',
   'kirkuk': 'كركوك',
   'diyala': 'ديالى',
@@ -54,6 +71,7 @@ export const cityTranslations: Record<string, string> = {
   'wasit': 'واسط',
   'saladin': 'صلاح الدين',
   'muthanna': 'المثنى',
+  'dhiqar': 'ذي قار',
   'dhi_qar': 'ذي قار',
   'maysan': 'ميسان',
   'diwaniyah': 'الديوانية',
@@ -155,3 +173,22 @@ export const translateCity = (city: any): string => {
     return String(city);
   }
 }; 
+
+/**
+ * حالة الإعلان.
+ *
+ * كانت تُترجَم بسلسلة `&&` مكرّرة داخل كل مكوّن، فيختلف النصّ بين
+ * الشاشات وتُنسى حالة في إحداها.
+ */
+export const statusTranslations: Record<string, string> = {
+  'pending': 'قيد المراجعة',
+  'approved': 'تمت الموافقة',
+  'rejected': 'مرفوض',
+  'resolved': 'تم الحل',
+};
+
+export const translateStatus = (status: any): string => {
+  if (status === null || status === undefined) return 'غير معروف';
+  const key = String(status).toLowerCase().trim();
+  return statusTranslations[key] || String(status);
+};

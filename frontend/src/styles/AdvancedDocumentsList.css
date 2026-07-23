@@ -121,7 +121,13 @@ h1 {
 
 .table-actions {
   display: flex;
-  gap: 5px;
+  /* الأزرار الأربعة كانت تفيض خارج الشاشة على العروض المتوسطة:
+     الزر موجود لكن لا يراه المشرف ولا شيء يدلّه على التمرير الأفقي.
+     الحلّ تصغيرها لتتّسع في سطر واحد — لا كسرها إلى عمود يضاعف
+     ارتفاع كل صف */
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 .view-button, 
@@ -130,13 +136,14 @@ h1 {
 .edit-button,
 .save-button,
 .cancel-button {
-  padding: 6px 12px;
-  margin: 0 3px;
+  padding: 6px 9px;
+  margin: 0;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
   transition: all 0.2s ease;
 }
 
@@ -511,3 +518,24 @@ button:disabled {
   background-color: #90CAF9;
   cursor: not-allowed;
 } 
+
+/* قيم التعدادات المترجَمة قصيرة ولا يفيد كسرها على سطرين */
+.documents-table td:nth-child(1),
+.documents-table td:nth-child(3),
+.documents-table td:nth-child(4) {
+  white-space: nowrap;
+}
+
+
+/*
+ * عمود الإجراءات يحجز عرضه صراحةً.
+ *
+ * عرض أعمدة الجدول يُوزَّع تلقائيًا حسب المحتوى، فكان العمود الأخير
+ * يُضغط إلى ما دون مجموع أزراره الأربعة ويُقصّ آخرها بصمت. الحدّ
+ * الأدنى هنا يضمن ظهورها كاملةً، وإن ضاقت النافذة انزلق الجدول
+ * أفقيًا داخل حاويته بدل إخفاء زر.
+ */
+.documents-table th:last-child,
+.documents-table td:last-child {
+  min-width: 165px;
+}

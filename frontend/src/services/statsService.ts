@@ -1,5 +1,4 @@
 import api from './api';
-import { mockStats } from './mockData';
 
 export interface AdminStats {
   totalUsers: number;
@@ -66,36 +65,14 @@ export const getAdminStats = async (): Promise<AdminStats> => {
       return stats;
     }
     
-    // إرجاع إحصائيات افتراضية في حالة عدم الحصول على بيانات صحيحة
-    return getDefaultStats();
+    throw new Error('شكل غير متوقّع لاستجابة الإحصائيات');
   } catch (error) {
     console.error('خطأ في جلب الإحصائيات:', error);
-    
-    // محاولة استخدام البيانات المخزنة حتى لو كانت قديمة
-    if (cachedStats) {
-      console.log('استخدام الإحصائيات المخزنة مؤقتًا بالرغم من انتهاء صلاحيتها');
-      return cachedStats;
-    }
-    
-    // إرجاع إحصائيات افتراضية
-    return getDefaultStats();
+    // الأصفار الافتراضية كانت تُعرض كأنها قراءة صحيحة، فتظهر رسالة
+    // «لا توجد بيانات» بينما الخادم متوقّف — تشخيصان مختلفان تمامًا
+    // لمن يقرأ اللوحة. الفشل يصل الآن إلى شاشة الخطأ الصريحة.
+    throw error;
   }
-};
-
-// وظيفة للحصول على إحصائيات افتراضية
-const getDefaultStats = (): AdminStats => {
-  return {
-    totalUsers: 0,
-    totalAdvertisements: 0,
-    pendingAdvertisements: 0,
-    approvedAdvertisements: 0,
-    rejectedAdvertisements: 0,
-    resolvedAdvertisements: 0,
-    totalContacts: 0,
-    pendingContacts: 0,
-    approvedContacts: 0,
-    rejectedContacts: 0
-  };
 };
 
 // دالة لتحديث الإحصائيات يدويًا
@@ -105,6 +82,13 @@ export const refreshAdminStats = (): void => {
 };
 
 // الحصول على إحصائيات مقسمة حسب الزمن لعرض التطور
+/*
+ * لا بيانات مُصطنَعة عند الفشل — انظر التعليق نفسه في `userService`.
+ *
+ * كان منحنى «تحليل النمو» وسجلّ النشاط يُولَّدان محليًا كلّما فشل
+ * الطلب: منحنى صاعد ورسائل نشاط بأسماء مستخدمين مخترعة. المشرف يرى
+ * لوحةً تعمل بينما لا يصله شيء من الخادم.
+ */
 export const getTimelineStats = async (period: 'week' | 'month' | 'year' = 'week'): Promise<TimelineStats[]> => {
   try {
     // محاولة استخدام المسار الأساسي للإحصائيات الزمنية
@@ -118,61 +102,13 @@ export const getTimelineStats = async (period: 'week' | 'month' | 'year' = 'week
       return response.data;
     }
     
-    // في حالة عدم توفر بيانات، نقوم بإنشاء بيانات عشوائية للاختبار
-    console.warn('لم يتم العثور على بيانات زمنية من الخادم، سيتم استخدام بيانات اختبار');
-    return generateMockTimelineData(period);
+    throw new Error('شكل غير متوقّع لاستجابة البيانات الزمنية');
   } catch (error) {
     console.error('خطأ في جلب البيانات الزمنية:', error);
-    return generateMockTimelineData(period);
+    throw error;
   }
 };
 
-// توليد بيانات عشوائية للاختبار في حالة غياب API
-function generateMockTimelineData(period: 'week' | 'month' | 'year'): TimelineStats[] {
-  const result: TimelineStats[] = [];
-  let days = 7;
-  
-  if (period === 'month') {
-    days = 30;
-  } else if (period === 'year') {
-    days = 12; // سنستخدم 12 شهر
-  }
-  
-  const today = new Date();
-  const baseUsers = 100 + Math.floor(Math.random() * 50);
-  const baseAds = 50 + Math.floor(Math.random() * 30);
-  
-  for (let i = 0; i < days; i++) {
-    const date = new Date();
-    if (period === 'year') {
-      // للسنة، نضبط التاريخ للشهر
-      date.setMonth(today.getMonth() - (days - i - 1));
-      date.setDate(1);
-    } else {
-      // للأسبوع أو الشهر، نضبط التاريخ لليوم
-      date.setDate(today.getDate() - (days - i - 1));
-    }
-    
-    // زيادة تدريجية للقيم لتحاكي النمو الطبيعي
-    const growthFactor = 1 + (i * 0.03);
-    const users = Math.floor(baseUsers * growthFactor);
-    const advertisements = Math.floor(baseAds * growthFactor);
-    const pendingAds = Math.floor(advertisements * 0.2);
-    const approvedAds = Math.floor(advertisements * 0.6);
-    const resolvedAds = Math.floor(advertisements * 0.2);
-    
-    result.push({
-      date: date.toISOString().split('T')[0],
-      users,
-      advertisements,
-      pendingAds,
-      approvedAds,
-      resolvedAds
-    });
-  }
-  
-  return result;
-}
 
 // استرجاع النشاط الأخير في النظام
 export const getRecentActivity = async (limit: number = 10): Promise<any[]> => {
@@ -190,78 +126,9 @@ export const getRecentActivity = async (limit: number = 10): Promise<any[]> => {
       return response.data;
     }
     
-    console.warn('لم يتم العثور على بيانات نشاط النظام، سيتم استخدام بيانات وهمية للاختبار');
-    return generateMockActivityData(limit);
+    throw new Error('شكل غير متوقّع لاستجابة نشاط النظام');
   } catch (error) {
     console.error('خطأ في جلب بيانات نشاط النظام:', error);
-    return generateMockActivityData(limit);
+    throw error;
   }
 };
-
-// توليد بيانات وهمية للنشاط
-function generateMockActivityData(limit: number): Array<{
-  id: string;
-  type: string;
-  message: string;
-  timestamp: string;
-  userId?: string;
-  userName?: string;
-  documentId?: string;
-  documentType?: string;
-}> {
-  const result = [];
-  const activityTypes = [
-    'document_added',
-    'document_approved',
-    'document_rejected',
-    'document_resolved',
-    'user_registered',
-    'contact_request'
-  ];
-  
-  const userNames = ['محمد علي', 'أحمد محمود', 'عبدالله عمر', 'سارة أحمد', 'فاطمة محمد'];
-  const documentTypes = ['بطاقة هوية', 'جواز سفر', 'رخصة قيادة', 'بطاقة عائلية', 'شهادة ميلاد'];
-  
-  const messageTemplates = {
-    document_added: ['تم إضافة مستند جديد', 'إضافة مستند للمراجعة'],
-    document_approved: ['تمت الموافقة على المستند', 'الموافقة على مستند معلق'],
-    document_rejected: ['تم رفض المستند', 'رفض مستند غير مطابق للشروط'],
-    document_resolved: ['تم استرداد المستند بنجاح', 'إغلاق إعلان بعد استرداد المستند'],
-    user_registered: ['انضمام مستخدم جديد', 'تسجيل عضو جديد في النظام'],
-    contact_request: ['طلب تواصل مع صاحب إعلان', 'طلب معلومات لاسترداد مستند']
-  };
-  
-  for (let i = 0; i < limit; i++) {
-    const typeIndex = Math.floor(Math.random() * activityTypes.length);
-    const type = activityTypes[typeIndex];
-    
-    // توليد تاريخ عشوائي في الأيام السبعة الماضية، مع ترتيب تنازلي (الأحدث أولاً)
-    const date = new Date();
-    date.setDate(date.getDate() - Math.floor(Math.random() * (i * 0.5)));
-    date.setHours(Math.floor(Math.random() * 24));
-    date.setMinutes(Math.floor(Math.random() * 60));
-    
-    // اختيار رسالة عشوائية بناءً على نوع النشاط
-    const messageOptions = messageTemplates[type as keyof typeof messageTemplates];
-    const message = messageOptions[Math.floor(Math.random() * messageOptions.length)];
-    
-    const userName = userNames[Math.floor(Math.random() * userNames.length)];
-    const documentType = documentTypes[Math.floor(Math.random() * documentTypes.length)];
-    
-    const activity = {
-      id: `activity-${i + 1}`,
-      type,
-      message,
-      timestamp: date.toISOString(),
-      userId: `user-${Math.floor(Math.random() * 20) + 1}`,
-      userName,
-      documentId: type.includes('document') ? `doc-${Math.floor(Math.random() * 50) + 1}` : undefined,
-      documentType: type.includes('document') ? documentType : undefined
-    };
-    
-    result.push(activity);
-  }
-  
-  // ترتيب النتائج بحسب التاريخ (الأحدث أولاً)
-  return result.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-} 
