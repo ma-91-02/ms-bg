@@ -353,88 +353,31 @@ export const deleteAdvertisement = async (id: string): Promise<void> => {
   }
 };
 
-// الموافقة على إعلان
+/**
+ * الموافقة على إعلان.
+ *
+ * الخادم يعرّف `PUT /advertisements/:id/approve` حصرًا. النسخة
+ * السابقة كانت تجرّب `PATCH /approve/:id` ثم `PATCH /:id/approve`
+ * قبل أن تصل إلى PUT في `catch` متداخل — والاثنان PATCH يردّان 404
+ * على كل نقرة. وحين تُبتلع المحاولة الأخيرة في مسار الخطأ لا تُعتمد
+ * الموافقة إطلاقًا: المشرف يضغط «موافقة» فلا يحدث شيء، ويبقى الإعلان
+ * محجوبًا عن العموم بلا سبب ظاهر.
+ *
+ * المسار الصحيح مباشرةً، بلا تجريب.
+ */
 export const approveAdvertisement = async (id: string): Promise<void> => {
-  try {
-    console.log(`الموافقة على الإعلان: ${id}`);
-    
-    // محاولة باستخدام PATCH أولاً
-    try {
-      await api.patch(`${API_PATHS.APPROVE_AD}/${id}`);
-      return;
-    } catch (patchError) {
-      console.warn('فشل طلب PATCH للموافقة، محاولة باستخدام المسار المباشر...');
-      
-      // محاولة باستخدام المسار المباشر
-      await api.patch(`${API_PATHS.ADS_BY_ID}/${id}/approve`);
-    }
-  } catch (error) {
-    console.error('خطأ في الموافقة على الإعلان:', error);
-    
-    // محاولة أخيرة باستخدام PUT
-    try {
-      await api.put(`${API_PATHS.ADS_BY_ID}/${id}/approve`);
-    } catch (finalError) {
-      console.error('فشلت جميع المحاولات للموافقة على الإعلان:', finalError);
-      throw finalError;
-    }
-  }
+  await api.put(`${API_PATHS.ADS_BY_ID}/${id}/approve`);
 };
 
-// رفض إعلان
-export const rejectAdvertisement = async (id: string): Promise<void> => {
-  try {
-    console.log(`رفض الإعلان: ${id}`);
-    
-    // محاولة باستخدام PATCH أولاً
-    try {
-      await api.patch(`${API_PATHS.REJECT_AD}/${id}`);
-      return;
-    } catch (patchError) {
-      console.warn('فشل طلب PATCH للرفض، محاولة باستخدام المسار المباشر...');
-      
-      // محاولة باستخدام المسار المباشر
-      await api.patch(`${API_PATHS.ADS_BY_ID}/${id}/reject`);
-    }
-  } catch (error) {
-    console.error('خطأ في رفض الإعلان:', error);
-    
-    // محاولة أخيرة باستخدام PUT
-    try {
-      await api.put(`${API_PATHS.ADS_BY_ID}/${id}/reject`);
-    } catch (finalError) {
-      console.error('فشلت جميع المحاولات لرفض الإعلان:', finalError);
-      throw finalError;
-    }
-  }
+// رفض إعلان — `PUT /:id/reject` حصرًا، انظر تعليق `approveAdvertisement`
+export const rejectAdvertisement = async (id: string, reason?: string): Promise<void> => {
+  await api.put(`${API_PATHS.ADS_BY_ID}/${id}/reject`, reason ? { reason } : {});
 };
 
 // حل إعلان
+// تحديد إعلان كمحلول — `PUT /:id/resolve` حصرًا
 export const resolveAdvertisement = async (id: string): Promise<void> => {
-  try {
-    console.log(`تحديد الإعلان ${id} كمحلول...`);
-    
-    // محاولة باستخدام PUT أولاً (الطريقة الصحيحة حسب تكوين الخادم)
-    try {
-      await api.put(`${API_PATHS.ADS_BY_ID}/${id}/resolve`, { isResolved: true });
-      return;
-    } catch (putError) {
-      console.warn('فشل طلب PUT للحل، محاولة باستخدام المسار المباشر...');
-      
-      // محاولة باستخدام PATCH مع البيانات المطلوبة
-      await api.patch(`${API_PATHS.RESOLVE_AD}/${id}`, { isResolved: true });
-    }
-  } catch (error) {
-    console.error('خطأ في تحديد الإعلان كمحلول:', error);
-    
-    // محاولة أخيرة باستخدام PATCH على المسار المباشر
-    try {
-      await api.patch(`${API_PATHS.ADS_BY_ID}/${id}/resolve`, { isResolved: true });
-    } catch (finalError) {
-      console.error('فشلت جميع المحاولات لتحديد الإعلان كمحلول:', finalError);
-      throw finalError;
-    }
-  }
+  await api.put(`${API_PATHS.ADS_BY_ID}/${id}/resolve`, { isResolved: true });
 };
 
 // الحصول على الإعلانات حسب الحالة
