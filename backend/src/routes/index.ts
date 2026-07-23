@@ -15,6 +15,7 @@ import adminContactRequestRoutes from './admin/contactRequestRoutes';
 import adminMatchesRoutes from './admin/matchesRoutes';
 import adminUsersRoutes from './admin/usersRoutes';
 import adminDashboardRoutes from './admin/dashboardRoutes';
+import adminStatsRoutes from './admin/statsRoutes';
 
 /**
  * تسجيل المسارات.
@@ -24,8 +25,8 @@ import adminDashboardRoutes from './admin/dashboardRoutes';
  *    الإشعارات كانت تُرجع 404 رغم اكتمال متحكمها.
  *  - `favorites` كانت معطّلة بتعليق داخل `adRoutes.ts`، و`adRoutes` نفسه
  *    غير مسجَّل — فالمفضلة لم يكن لها مسار إطلاقًا.
- *  - أُزيلت استيرادات `require()` داخل `try/catch` التي كانت تكرّر
- *    استيراد نفس الملفات المستوردة أصلًا في الأعلى.
+ *  - مسارات الإحصاءات الثلاثة كانت تُستدعى من اللوحة وتُرجع 404،
+ *    فتسقط الواجهة بصمت إلى بيانات مولَّدة عشوائيًا.
  */
 const router = express.Router();
 
@@ -42,7 +43,14 @@ router.use('/api/login', adminAuthRoutes);
 router.use('/api/admin/advertisements', adminAdvertisementRoutes);
 router.use('/api/admin/contact-requests', adminContactRequestRoutes);
 router.use('/api/admin/matches', adminMatchesRoutes);
-router.use('/api/admin/users', adminUsersRoutes);
 router.use('/api/admin/dashboard', adminDashboardRoutes);
+
+/**
+ * الإحصاءات تُسجَّل قبل `/api/admin/users` لأن اللوحة تطلب
+ * `/api/admin/users/active`، ولو جاء موجّه المستخدمين أولًا لفسّر
+ * 'active' كمعرّف مستخدم وأعاد 404.
+ */
+router.use('/api/admin', adminStatsRoutes);
+router.use('/api/admin/users', adminUsersRoutes);
 
 export default router;
