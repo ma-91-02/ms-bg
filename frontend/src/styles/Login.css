@@ -90,3 +90,11 @@
     padding: 30px 20px;
   }
 } 
+/* شعار صفحة الدخول */
+.login-logo {
+  display: block;
+  height: 64px;
+  width: auto;
+  margin: 0 auto 18px;
+  object-fit: contain;
+}

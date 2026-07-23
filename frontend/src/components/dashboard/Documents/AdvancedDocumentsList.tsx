@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAllAdvertisements, approveAdvertisement, rejectAdvertisement, Advertisement, getAdvertisementsByStatus, updateAdvertisement, resolveAdvertisement } from '../../../services/advertisementService';
 import '../../../styles/AdvancedDocumentsList.css';
+import { translateDocumentType, translateCity } from '../../../utils/translationUtils';
 
 // قائمة المحافظات
 const governorates = [
@@ -536,9 +537,11 @@ const AdvancedDocumentsList: React.FC = () => {
             <tbody>
               {filteredDocuments.map(doc => (
                 <tr key={doc.id || Math.random().toString()} className={selectedDocument?.id === doc.id ? 'selected' : ''}>
-                  <td>{doc.documentType || 'غير معروف'}</td>
+                  {/* القاموس موجود في translationUtils لكنه لم يكن يُستخدم هنا،
+                      فتظهر قيم التعداد الخام (passport / baghdad) للمشرف */}
+                  <td>{doc.documentType ? translateDocumentType(doc.documentType) : 'غير معروف'}</td>
                   <td>{doc.name || 'غير معروف'}</td>
-                  <td>{doc.location || 'غير معروف'}</td>
+                  <td>{doc.location ? translateCity(doc.location) : 'غير معروف'}</td>
                   <td>{doc.date || 'غير معروف'}</td>
                   <td>
                     <span className={`status-badge status-${doc.status || 'unknown'}`}>

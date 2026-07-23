@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../../services/authService';
 import '../../styles/Login.css';
+import logo from '../../assets/images/logo.png';
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -34,6 +35,8 @@ const Login: React.FC = () => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
+          {/* الشعار كان غائبًا عن أول صفحة يراها المشرف */}
+          <img src={logo} alt="مستمسكاتي" className="login-logo" />
           <h2>تسجيل الدخول</h2>
           <p>مرحبًا بك في لوحة تحكم مستمسكاتي</p>
         </div>
