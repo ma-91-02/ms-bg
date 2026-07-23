@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
-import { ensureUploadDir } from '../../config/paths';
+import { ensureUploadDir, UPLOADS_ROOT } from '../../config/paths';
 
 /**
  * إنشاء خدمة رفع الملفات حسب نوع الملف والمجلد
@@ -79,17 +79,26 @@ export const upload = multer({
   }
 });
 
-// وظيفة لرفع مجموعة من الصور
-export const uploadImages = async (files: Express.Multer.File[]): Promise<string[]> => {
-  const uploadedPaths: string[] = [];
-  
-  for (const file of files) {
-    const filePath = `/uploads/advertisements/${file.filename}`;
-    uploadedPaths.push(filePath);
-  }
-  
-  return uploadedPaths;
-};
+/**
+ * المسار العام للملفات المرفوعة.
+ *
+ * علّة أُصلحت هنا: كانت الدالة تبني المسار من نصّ ثابت
+ * `/uploads/advertisements/${filename}` بغضّ النظر عن الموضع الحقيقي
+ * للملف. والوسيط المستخدم في مسار الإعلانات (`uploadMiddleware`) يحفظ
+ * في جذر مجلد الرفع لا في مجلد فرعي — فيُخزَّن الملف في
+ * `/app/uploads/x.jpg` بينما يُسجَّل في قاعدة البيانات كـ
+ * `/uploads/advertisements/x.jpg`. النتيجة: الرفع ينجح والصورة تُعيد
+ * 404 عند العرض، وهو فشل صامت لا يظهر إلا حين يفتح المستخدم الإعلان.
+ *
+ * المسار الآن مشتقّ من `file.destination` الذي يضبطه الوسيط فعليًا.
+ */
+export const uploadImages = async (files: Express.Multer.File[]): Promise<string[]> =>
+  files.map((file) => {
+    // الجزء النسبي من جذر مجلد الرفع (قد يكون فارغًا أو 'advertisements')
+    const subdir = path.relative(UPLOADS_ROOT, file.destination);
+    const segments = ['uploads', ...subdir.split(path.sep).filter(Boolean), file.filename];
+    return `/${segments.join('/')}`;
+  });
 
 export default {
   createUploadMiddleware,

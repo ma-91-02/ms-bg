@@ -1,7 +1,7 @@
 import express from 'express';
 import * as advertisementController from '../../controllers/mobile/advertisementController';
 import { protect } from '../../middleware/common/authMiddleware';
-import { uploadMiddleware } from '../../middleware/common/uploadMiddleware';
+import { uploadAdvertisementImages } from '../../services/common/fileUploadService';
 
 const router = express.Router();
 
@@ -19,8 +19,10 @@ router.get('/user/my-advertisements', advertisementController.getUserAdvertiseme
 router.get('/:id', advertisementController.getAdvertisementById);
 
 // إنشاء/تحديث/حذف إعلان
-router.post('/', uploadMiddleware.array('images', 5), advertisementController.createAdvertisement);
-router.put('/:id', uploadMiddleware.array('images', 5), advertisementController.updateAdvertisement);
+// وسيط مخصّص للإعلانات يحفظ في uploads/advertisements؛ الوسيط العام
+// كان يحفظ في الجذر بينما يُسجَّل المسار على أنه في المجلد الفرعي
+router.post('/', uploadAdvertisementImages, advertisementController.createAdvertisement);
+router.put('/:id', uploadAdvertisementImages, advertisementController.updateAdvertisement);
 router.delete('/:id', advertisementController.deleteAdvertisement);
 
 // إدارة الصور
