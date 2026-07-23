@@ -62,6 +62,22 @@ services:
     environment:
       SERVICE_FQDN_FRONTEND_80: /
 
+  # تطبيق المستخدم (PWA) — مستودع منفصل: github.com/ma-91-02/ms-mobile-app
+  # في Coolify يُنشأ كمورد مستقل يشير إلى ذلك المستودع؛ أُدرج هنا للتوثيق
+  # ولتشغيل المنظومة كاملةً محليًا عبر:
+  #   git clone https://github.com/ma-91-02/ms-mobile-app ../ms-mobile-app
+  pwa:
+    build:
+      context: ../ms-mobile-app
+      dockerfile: Dockerfile
+      args:
+        EXPO_PUBLIC_API_URL: ${EXPO_PUBLIC_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      SERVICE_FQDN_PWA_80: /
+
 volumes:
   pgdata:
   uploads:
