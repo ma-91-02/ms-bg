@@ -19,6 +19,19 @@ const AdvancedDocumentsList: React.FC = () => {
   const [selectedDocument, setSelectedDocument] = useState<Advertisement | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  /**
+   * إشعار عابر بدل `alert()`.
+   *
+   * أزرار الموافقة/الرفض كانت تستدعي `alert()` الأصلي: نافذة تحجب
+   * الشاشة ويجب إغلاقها يدويًا بعد كل إجراء — عبء على مشرف يراجع
+   * عشرات الإعلانات. وقبلها `setLoading(true)` يخفي القائمة كاملةً
+   * خلف دوّار. النتيجة أن المشرف لا يرى تأكيدًا واضحًا، فيظنّ أن
+   * الزر لم يعمل ويضغط ثانيةً. هذا شريط عابر لا يقطع العمل. */
+  const [toast, setToast] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
+  const notify = (text: string, kind: 'ok' | 'err' = 'ok') => {
+    setToast({ text, kind });
+    window.setTimeout(() => setToast(null), 3200);
+  };
   const [error, setError] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [filter, setFilter] = useState({
@@ -87,18 +100,18 @@ const AdvancedDocumentsList: React.FC = () => {
       }
       
       console.log('عدد الإعلانات المستلمة:', fetchedDocuments.length);
-      
-      if (fetchedDocuments.length === 0) {
-        console.log('لم يتم العثور على بيانات، الاستعلام عن الحالة النشطة...');
-        // محاولة أخيرة - الحصول على الإعلانات النشطة إذا لم يتم العثور على بيانات
-        try {
-          fetchedDocuments = await getAdvertisementsByStatus('active');
-          console.log('تم استلام بيانات نشطة:', fetchedDocuments);
-        } catch (activeError) {
-          console.error('فشل في جلب الإعلانات النشطة:', activeError);
-        }
-      }
-      
+
+      /*
+       * لا سقوط إلى `active` عند الفراغ.
+       *
+       * كانت هنا «محاولة أخيرة» تجلب الإعلانات النشطة (المعتمدة) حين
+       * تعود القائمة فارغة. أثرها كارثي على طابور المراجعة: ما إن
+       * يوافق المشرف على آخر إعلان معلّق حتى تُصبح قائمة `pending`
+       * فارغة، فتُستبدل فورًا بكل الإعلانات المعتمدة — فيمتلئ طابور
+       * المراجعة بما فُرغ منه ويظهر كأن الموافقة لم تُخرج شيئًا.
+       * الفراغ حالة صحيحة تُعرض كما هي.
+       */
+
       setDocuments(fetchedDocuments);
       applyFilters(fetchedDocuments);
     } catch (error) {
@@ -207,83 +220,56 @@ const AdvancedDocumentsList: React.FC = () => {
   
   const handleApprove = async (docId: string) => {
     if (!docId) return;
-    
-    setLoading(true);
     try {
       await approveAdvertisement(docId);
-      
-      // تحديث حالة الإعلان في القائمة
-      setDocuments(prevDocs => prevDocs.map(doc => 
+      setDocuments(prevDocs => prevDocs.map(doc =>
         doc.id === docId ? { ...doc, status: 'approved' } : doc
       ));
-      
-      // تحديث الإعلان المحدد أيضاً إذا كان هو نفسه
       if (selectedDocument?.id === docId) {
         setSelectedDocument(prev => prev ? { ...prev, status: 'approved' } : null);
       }
-      
-      alert('تمت الموافقة على الإعلان بنجاح');
-      handleRefresh(); // تحديث القائمة بعد تغيير الحالة
+      notify('تمت الموافقة على الإعلان');
+      handleRefresh();
     } catch (error) {
       console.error('خطأ عند الموافقة على الإعلان:', error);
-      alert('فشل في الموافقة على الإعلان');
-    } finally {
-      setLoading(false);
+      notify('فشل في الموافقة على الإعلان', 'err');
     }
   };
   
   const handleReject = async (docId: string) => {
     if (!docId) return;
-    
-    setLoading(true);
     try {
       await rejectAdvertisement(docId);
-      
-      // تحديث حالة الإعلان في القائمة
-      setDocuments(prevDocs => prevDocs.map(doc => 
+      setDocuments(prevDocs => prevDocs.map(doc =>
         doc.id === docId ? { ...doc, status: 'rejected' } : doc
       ));
-      
-      // تحديث الإعلان المحدد أيضاً إذا كان هو نفسه
       if (selectedDocument?.id === docId) {
         setSelectedDocument(prev => prev ? { ...prev, status: 'rejected' } : null);
       }
-      
-      alert('تم رفض الإعلان بنجاح');
-      handleRefresh(); // تحديث القائمة بعد تغيير الحالة
+      notify('تم رفض الإعلان');
+      handleRefresh();
     } catch (error) {
       console.error('خطأ عند رفض الإعلان:', error);
-      alert('فشل في رفض الإعلان');
-    } finally {
-      setLoading(false);
+      notify('فشل في رفض الإعلان', 'err');
     }
   };
   
   // إضافة دالة لتحديد الإعلان كمحلول
   const handleResolve = async (docId: string) => {
     if (!docId) return;
-    
-    setLoading(true);
     try {
       await resolveAdvertisement(docId);
-      
-      // تحديث حالة الإعلان في القائمة
-      setDocuments(prevDocs => prevDocs.map(doc => 
+      setDocuments(prevDocs => prevDocs.map(doc =>
         doc.id === docId ? { ...doc, status: 'resolved' } : doc
       ));
-      
-      // تحديث الإعلان المحدد أيضاً إذا كان هو نفسه
       if (selectedDocument?.id === docId) {
         setSelectedDocument(prev => prev ? { ...prev, status: 'resolved' } : null);
       }
-      
-      alert('تم تحديد الإعلان كمحلول بنجاح');
-      handleRefresh(); // تحديث القائمة بعد تغيير الحالة
+      notify('تم تحديد الإعلان كمحلول');
+      handleRefresh();
     } catch (error) {
       console.error('خطأ عند تحديد الإعلان كمحلول:', error);
-      alert('فشل في تحديد الإعلان كمحلول');
-    } finally {
-      setLoading(false);
+      notify('فشل في تحديد الإعلان كمحلول', 'err');
     }
   };
   
@@ -442,6 +428,14 @@ const AdvancedDocumentsList: React.FC = () => {
   
   return (
     <div className="advanced-documents-container">
+      {/* شريط تأكيد عابر — بديل `alert()` الحاجب */}
+      {toast && (
+        <div className={`review-toast ${toast.kind === 'ok' ? 'is-ok' : 'is-err'}`} role="status">
+          <i className={`fas ${toast.kind === 'ok' ? 'fa-check-circle' : 'fa-exclamation-circle'}`}></i>
+          {toast.text}
+        </div>
+      )}
+
       <div className="documents-header">
         {/* كان العنوان «إدارة الإعلانات» — نفس عنوان قسم «جميع
             الإعلانات» تمامًا، فلا يعرف المشرف في أي شاشة هو */}
